@@ -1,9 +1,9 @@
 package client
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
-import "jabber.ru/xmpp/jid"
-import "jabber.ru/xmpp/stanza"
+import "github.com/ermine/bullxmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/jid"
+import "github.com/ermine/bullxmpp/stanza"
 import "strconv"
 const NS = "jabber:client"
 type Iq struct {

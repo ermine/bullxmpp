@@ -1,7 +1,7 @@
 package vcard
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 const NS = "vcard-temp"
 type Vcard struct {
   VERSION *string

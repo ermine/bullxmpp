@@ -1,9 +1,9 @@
 package stream
 
 import (
-	"jabber.ru/xmpp/jid"
-	"jabber.ru/xmpp/logger"
-	"jabber.ru/xmpp/xmlencoder"
+	"github.com/ermine/bullxmpp/jid"
+	"github.com/ermine/bullxmpp/logger"
+	"github.com/ermine/bullxmpp/xmlencoder"
 	"errors"
 	"net"
 	"reflect"

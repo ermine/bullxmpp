@@ -1,13 +1,13 @@
 package client
 
 import (
-	"jabber.ru/xmpp/jid"
-	"jabber.ru/xmpp/stream"
-	"jabber.ru/xmpp/starttls"
-	"jabber.ru/xmpp/bind"
-	"jabber.ru/xmpp/sasl"
-	"jabber.ru/xmpp/session"
-	"jabber.ru/xmpp/xmlencoder"
+	"github.com/ermine/bullxmpp/jid"
+	"github.com/ermine/bullxmpp/stream"
+	"github.com/ermine/bullxmpp/starttls"
+	"github.com/ermine/bullxmpp/bind"
+	"github.com/ermine/bullxmpp/sasl"
+	"github.com/ermine/bullxmpp/session"
+	"github.com/ermine/bullxmpp/xmlencoder"
 	"net"
 	"strconv"
 	"errors"

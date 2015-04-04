@@ -1,9 +1,9 @@
 package iqregister
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
-import "jabber.ru/xmpp/xdata"
-import "jabber.ru/xmpp/xoob"
+import "github.com/ermine/bullxmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xdata"
+import "github.com/ermine/bullxmpp/xoob"
 const NS = "jabber:iq:register"
 type Query struct {
   Fields struct {

@@ -1,8 +1,8 @@
 package client
 
 import (
-	"jabber.ru/xmpp/session"
-	"jabber.ru/xmpp/stream"
+	"github.com/ermine/bullxmpp/session"
+	"github.com/ermine/bullxmpp/stream"
 	"math/rand"
 	"strconv"
 )

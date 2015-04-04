@@ -1,7 +1,7 @@
 package info
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 const NS = "http://jabber.org/protocol/disco#info"
 type Info struct {
   Node *string

@@ -1,8 +1,8 @@
 package client
 
 import (
-	"jabber.ru/xmpp/starttls"
-	"jabber.ru/xmpp/stream"
+	"github.com/ermine/bullxmpp/starttls"
+	"github.com/ermine/bullxmpp/stream"
 	"crypto/tls"
 	"fmt"
 )

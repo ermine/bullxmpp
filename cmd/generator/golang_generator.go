@@ -44,7 +44,7 @@ var mapSimpleTypes = map[string]struct{
 	Type string
 	Import string
 }{
-	"jid": {"jid.JID", "jabber.ru/xmpp/jid"},
+	"jid": {"jid.JID", "github.com/ermine/bullxmpp/jid"},
 	"int": {"int", "strconv"},
 	"uint": {"uint", "strconv"},
 	"string": {"string", ""},
@@ -85,7 +85,7 @@ func golang_generate_package(dir string, schema *Schema) error {
 		}
 		file.WriteString("\n")
 		file.WriteString("import \"encoding/xml\"\n")
-		file.WriteString("import \"jabber.ru/xmpp/xmlencoder\"\n")
+		file.WriteString("import \"github.com/ermine/bullxmpp/xmlencoder\"\n")
 		for _, i := range imports {
 			file.WriteString("import \"" + i + "\"\n")
 		}
@@ -125,9 +125,9 @@ func golang_getImports(fields []*Field, imports *[]string) {
 					for _, target := range schema.Targets {
 						if target.Space == typ.Space {
 							if target.Name != "" {
-								append_import(imports, "jabber.ru/xmpp/" + schema.PackageName + "/" + target.Name)
+								append_import(imports, "github.com/ermine/bullxmpp/" + schema.PackageName + "/" + target.Name)
 							} else {
-								append_import(imports, "jabber.ru/xmpp/" + schema.PackageName)
+								append_import(imports, "github.com/ermine/bullxmpp/" + schema.PackageName)
 							}
 							break Added
 						}

@@ -1,7 +1,7 @@
 package xoob
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 const NS = "jabber:x:oob"
 type X struct {
   Url *string

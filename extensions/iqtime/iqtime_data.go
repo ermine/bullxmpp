@@ -1,7 +1,7 @@
 package iqtime
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 const NS = "jabber:iq:time"
 type Time struct {
   Utc *string

@@ -1,9 +1,9 @@
 package client
 
 import (
-	"jabber.ru/xmpp/jid"
-	"jabber.ru/xmpp/sasl"
-	"jabber.ru/xmpp/stream"
+	"github.com/ermine/bullxmpp/jid"
+	"github.com/ermine/bullxmpp/sasl"
+	"github.com/ermine/bullxmpp/stream"
 	"encoding/base64"
 	"math/rand"
 	"crypto/md5"

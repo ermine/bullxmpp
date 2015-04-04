@@ -3,9 +3,9 @@ package main
 import (
 	"flag"
 	"github.com/stvp/go-toml-config" 
-	"jabber.ru/xmpp/client"
-	"jabber.ru/xmpp/xmlencoder"
-	"jabber.ru/xmpp/extensions/iqversion"
+	"github.com/ermine/bullxmpp/client"
+	"github.com/ermine/bullxmpp/xmlencoder"
+	"github.com/ermine/bullxmpp/extensions/iqversion"
 	"fmt"
 	"os"
 )

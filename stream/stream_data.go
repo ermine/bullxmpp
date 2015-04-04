@@ -1,8 +1,8 @@
 package stream
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
-import "jabber.ru/xmpp/jid"
+import "github.com/ermine/bullxmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/jid"
 const NS = "http://etherx.jabber.org/streams"
 type Start struct {
   To *jid.JID

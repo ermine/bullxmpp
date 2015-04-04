@@ -1,7 +1,7 @@
 package privacy
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 import "strconv"
 const NS = "jabber:iq:privacy"
 type Privacy struct {

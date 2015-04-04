@@ -1,9 +1,9 @@
 package roster
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 import "strconv"
-import "jabber.ru/xmpp/jid"
+import "github.com/ermine/bullxmpp/jid"
 const NS = "jabber:iq:roster"
 type Roster struct {
   Ver *string

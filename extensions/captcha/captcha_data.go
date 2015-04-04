@@ -1,8 +1,8 @@
 package captcha
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
-import "jabber.ru/xmpp/xdata"
+import "github.com/ermine/bullxmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xdata"
 const NS = "urn:xmpp:captcha"
 type Captcha struct {
   Xdata *xdata.X

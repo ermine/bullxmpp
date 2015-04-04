@@ -1,8 +1,8 @@
 package bind
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
-import "jabber.ru/xmpp/jid"
+import "github.com/ermine/bullxmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/jid"
 const NS = "urn:ietf:params:xml:ns:xmpp-bind"
 type Bind struct {
   Resource *string

@@ -1,7 +1,7 @@
 package sasl
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 const NS = "urn:ietf:params:xml:ns:xmpp-sasl"
 type Mechanisms struct {
   Mechanism []string

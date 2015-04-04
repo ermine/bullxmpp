@@ -1,10 +1,10 @@
 package event
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
-import "jabber.ru/xmpp/xdata"
+import "github.com/ermine/bullxmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xdata"
 import "time"
-import "jabber.ru/xmpp/jid"
+import "github.com/ermine/bullxmpp/jid"
 const NS = "http://jabber.org/protocol/pubsub#event"
 type Event struct {
  Payload interface{}

@@ -1,11 +1,11 @@
 package muc
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 import "strconv"
 import "time"
-import "jabber.ru/xmpp/jid"
-import "jabber.ru/xmpp/xdata"
+import "github.com/ermine/bullxmpp/jid"
+import "github.com/ermine/bullxmpp/xdata"
 const NS = "http://jabber.org/protocol/muc"
 type Enter struct {
   History struct {

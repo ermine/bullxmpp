@@ -1,7 +1,7 @@
 package time
 
 import "encoding/xml"
-import "jabber.ru/xmpp/xmlencoder"
+import "github.com/ermine/bullxmpp/xmlencoder"
 const NS = "urn:xmpp:time"
 type Time struct {
   Tz *string
