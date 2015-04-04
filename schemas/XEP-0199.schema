@@ -1,0 +1,5 @@
+package ping
+category extension
+targetNamespace urn:xmpp:ping {
+  *ping  ::= set {} element
+}

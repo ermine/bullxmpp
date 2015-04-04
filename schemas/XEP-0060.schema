@@ -1,0 +1,72 @@
+package pubsub
+category extension
+targetNamespace http://jabber.org/protocol/pubsub#event {
+name = event
+
+  *event ::= choice {
+    collection
+    configuration
+    delete
+    items
+    purge
+    subscription
+  } element
+
+  collection ::= set {
+    node string attribute
+    type set {
+      node string attribute required    
+      type enum {
+        associate
+        disassociate
+      } name
+    } element
+  } element
+  
+  configuration ::= set {
+    node string attribute
+    xdata extension(jabber:x:data x)
+  } element
+  
+  delete ::= set {
+    node string attribute required
+    redirect set {
+      url string attribute required
+    } element
+  } element
+
+# TODO: choice
+  items ::= set {
+    node string attribute required
+    items sequence of item
+    retracts sequence of retract
+  } element
+
+  item ::= set {
+    id string attribute
+    node string attribute
+    publisher string attribute
+    event extension
+  } element
+
+  purge ::= set {
+    node string attribute required
+  } element
+
+  retract ::= set {
+    id string attribute required
+  } element
+
+  subscription ::= set {
+    expiry datetime attribute
+    jid jid attribute required
+    node string attribute
+    subid string attribute
+    subscription enum {
+      none
+      pending
+      subscribed
+      unconfigured
+    } attribute
+  } element
+}

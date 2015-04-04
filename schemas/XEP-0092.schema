@@ -1,0 +1,10 @@
+package iqversion
+category extension
+targetNamespace jabber:iq:version {
+
+  *version ::= set {
+    name string element:cdata required
+    version string element:cdata required
+    os string element:cdata
+  } element(query)
+}

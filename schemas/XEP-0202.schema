@@ -1,0 +1,8 @@
+package time
+category extension
+targetNamespace urn:xmpp:time {
+  *time ::= set {
+    tz string element:cdata required
+    utc string element:cdata required
+  } element
+}

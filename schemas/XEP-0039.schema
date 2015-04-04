@@ -1,0 +1,12 @@
+package stats
+category extension
+targetNamespace http://jabber.org/protocol/stats {
+
+  *stats ::= sequence of stat element(query)
+
+  stat ::= set {
+    name string attribute
+    units string attribute
+    value string attribute
+  } element
+}

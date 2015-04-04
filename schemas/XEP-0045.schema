@@ -1,0 +1,116 @@
+package muc
+category extension
+
+targetNamespace http://jabber.org/protocol/muc {
+
+  *enter ::= set {
+    history set {
+      maxchars int attribute
+      maxstanzas int attribute
+      seconds int attribute
+      since datetime attribute
+    } element
+    password string element:cdata
+  } element(x)
+}
+
+targetNamespace http://jabber.org/protocol/muc#user {
+  name = user
+
+  *action ::= set {
+    decline
+    destroy
+    invite sequence of invite
+    item
+    password string element:cdata
+    status sequence of status
+  } element(x)
+  
+  status ::= set {
+      code int attribute required  # 100-999
+  } element
+
+  decline ::= set {
+    from jid attribute
+    to jid attribute
+    reason string element:cdata
+  } element
+
+  destroy ::= set {
+    jid jid attribute
+    reason string element:cdata
+  } element
+  
+  invite ::= set {
+    from jid attribute
+    to jid attribute
+    reason string element:cdata
+  } element
+  
+  item ::= set {
+    affiliation enum {
+      admin
+      member
+      none
+      outcast
+      owner
+    } attribute
+    jid jid attribute
+    nick string attribute
+    role enum {
+      moderator
+      none
+      participant
+      visitor
+    } attribute
+    actor set {
+      jid jid attribute required
+    } element
+    reason string element:cdata
+    continue boolean element:bool
+  } element
+}
+
+targetNamespace http://jabber.org/protocol/muc#owner {
+  name = owner
+
+  *configure ::= extension(jabber:x:data x) element(query)
+  
+  *destroy ::= set {
+    set {
+      jid jid attribute
+      password string element:cdata
+      reason string element:cdata
+    } element(destroy)
+  } element(query)
+}
+
+targetNamespace http://jabber.org/protocol/muc#admin {
+  name = admin
+
+  *query ::= set {
+    items sequence of item
+  } element
+
+  item ::= set {
+      affiliation enum {
+            admin
+            member
+            none
+            outcast
+            owner
+          } attribute
+        jid jid attribute
+        nick string attribute
+        role enum {
+            moderator
+            none
+            participant
+            visitor
+          } attribute
+        actor set {
+          jid jid attribute required
+        } element
+        reason string element:cdata
+      } element
+}

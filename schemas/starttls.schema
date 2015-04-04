@@ -1,0 +1,11 @@
+package starttls
+category core
+targetNamespace urn:ietf:params:xml:ns:xmpp-tls {
+
+  *starttls ::= set {
+    required boolean element:bool
+  } element
+
+  +proceed ::= set {} element
+  +failure ::= set {} element
+}

@@ -1,0 +1,12 @@
+### Starting build.
+# Target: ucd_reader.ml.depends, tags: { debug, extension:ml, file:ucd_reader.ml, ocaml, ocamldep, quiet, traverse }
+/usr/local/bin/ocamldep.opt -modules ucd_reader.ml > ucd_reader.ml.depends
+# Target: bst.ml.depends, tags: { debug, extension:ml, file:bst.ml, ocaml, ocamldep, quiet, traverse }
+/usr/local/bin/ocamldep.opt -modules bst.ml > bst.ml.depends # cached
+# Target: bst.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:bst.cmo, file:bst.ml, implem, ocaml, quiet, traverse }
+/usr/local/bin/ocamlc.opt -c -g -o bst.cmo bst.ml # cached
+# Target: ucd_reader.cmo, tags: { byte, compile, debug, extension:cmo, extension:ml, file:ucd_reader.cmo, file:ucd_reader.ml, implem, ocaml, quiet, traverse }
+/usr/local/bin/ocamlc.opt -c -g -o ucd_reader.cmo ucd_reader.ml
+# Target: ucd_reader.byte, tags: { byte, debug, dont_link_with, extension:byte, file:ucd_reader.byte, link, ocaml, program, quiet, traverse, use_str }
+/usr/local/bin/ocamlc.opt str.cma -g bst.cmo ucd_reader.cmo -o ucd_reader.byte
+# Compilation successful.

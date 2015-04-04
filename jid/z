@@ -1,0 +1,32 @@
+xn----7sbcgldb2a9a7ach1k.xn--p1ai
+insert - 0 а
+а-
+insert а- 0 б
+ба-
+insert ба- 3 в
+ба-в
+insert ба-в 0 е
+еба-в
+insert еба-в 4 е
+subinsert еба-
+еба-ев
+insert еба-ев 6 е
+еба-еве
+insert еба-еве 3 й
+subinsert еба
+ебай-еве
+insert ебай-еве 3 н
+subinsert еба
+ебанй-еве
+insert ебанй-еве 7 р
+subinsert ебанй-е
+ебанй-ерве
+insert ебанй-ерве 10 р
+ебанй-ервер
+insert ебанй-ервер 6 с
+subinsert ебанй-
+ебанй-сервер
+insert ебанй-сервер 4 ы
+subinsert ебан
+ебаный-сервер
+decoded ебаный-сервер

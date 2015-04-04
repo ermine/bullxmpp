@@ -1,0 +1,20 @@
+[main]
+indir = "../../schemas"
+
+# abc
+[golang]
+outdir = "../.."
+
+[java]
+outdir = "/home/username/path/java//src/"
+package-prefix = "com.example.java"
+
+[ocaml]
+outdir = "/home/username/path/ocaml/xmpp2/src/"
+extensionfile = "/home/username/path/ocaml/xmpp2/src/extension.ml"
+mlpack = "/home/username/path/ocaml/xmpp2/src/xmpp.mlpack"
+
+[c]
+outdir = "/home/username/path//c/jru/src/xmppdata"
+extensionfile = "/home/username/path/c/jru/src/xmppdata/extensions.c"
+extensiontypes = "/home/username/path/c/jru/src/xmppdata/extensions.h"

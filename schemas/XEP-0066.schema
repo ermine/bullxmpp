@@ -1,0 +1,9 @@
+package xoob
+category extension
+targetNamespace jabber:x:oob {
+
+  *x ::= set {
+    url string element:cdata required
+    desc string element:cdata
+  } element
+}

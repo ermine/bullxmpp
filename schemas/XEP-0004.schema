@@ -1,0 +1,47 @@
+package xdata
+category extension
+targetNamespace jabber:x:data {
+
+  *x ::= set {
+    type enum {
+      cancel
+      form
+      result
+      submit
+    } attribute required
+    title string element:cdata
+    reported sequence of field element
+    fields sequence {
+      instructions string element:cdata
+      field
+       item sequence of field element
+    }
+  } element
+
+  field ::= set {
+    label string attribute
+    type enum {
+      boolean
+      fixed
+      hidden
+      jid-multi
+      jid-single
+      list-multi
+      list-single
+      text-multi
+      text-private
+      text-single
+    } attribute default text-single
+    var string attribute
+    desc string element:cdata
+    required boolean element:bool
+    value string element:cdata
+    # option sequence of set { ... }
+    option sequence of option
+  } element
+
+  option ::= set {
+    label string attribute
+   value string element:cdata
+  } element
+}

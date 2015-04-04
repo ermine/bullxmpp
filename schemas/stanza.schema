@@ -1,0 +1,61 @@
+package client
+category core
+targetNamespace jabber:client {
+
+  *iq ::= set {
+    from jid attribute
+    to jid attribute
+    id string attribute required
+    type enum {
+      get
+      set
+      result
+      error
+    } attribute required
+    lang xmllang attribute
+    payload extension
+    error extension(urn:ietf:params:xml:ns:xmpp-stanzas error)
+  } element
+
+  *presence ::= set {
+    from jid attribute
+    to jid attribute
+    id string attribute
+    type enum {
+      subscribe
+      subscribed
+      unsubscribe
+      unsubscribed
+      unavailable
+    } attribute
+    lang xmllang attribute
+    show enum {
+      chat
+      away
+      xa
+      dnd
+    } element:cdata
+    status string element:cdata
+    priority int element:cdata
+    x sequence of extension
+    error extension(urn:ietf:params:xml:ns:xmpp-stanzas error)
+  } element
+
+  *message ::= set {
+    from jid attribute
+    to jid attribute
+    id string attribute
+    type enum {
+      normal
+      chat
+      groupchat
+      headline
+    } attribute default normal
+    lang xmllang attribute
+    thread string element:cdata
+    subject langstring element
+    body langstring element
+    x sequence of extension
+    error extension(urn:ietf:params:xml:ns:xmpp-stanzas error)
+  } element
+}

@@ -1,0 +1,48 @@
+package stream
+category core
+targetNamespace stream http://etherx.jabber.org/streams {
+
+  *start ::= set {
+    to jid attribute
+    from jid attribute
+    id string attribute
+    version string attribute
+    lang xmllang attribute
+  } startelement(stream)
+
+  *features ::= sequence of extension element
+  
+  *error ::= set {
+    text langstring  element
+    condition set {
+      name enum {
+        bad-format
+        bad-namespace-prefix
+        conflict
+        connection-timeout
+        host-gone
+        host-unknown
+        improper-addressing
+        internal-server-error
+        invalid-from
+        invalid-namespace
+        invalid-xml
+        not-authorized
+        not-well-formed
+        policy-violation
+        remote-connection-failed
+        reset
+        resource-constraint
+        restricted-xml
+        see-other-host
+        system-shutdown
+        undefined-condition
+        unsupported-encoding
+        unsupported-feature
+        unsupported-stanza-type
+        unsupported-version
+      } name
+      extra string cdata
+    } element required
+  } element(error)
+}

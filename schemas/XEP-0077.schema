@@ -1,0 +1,32 @@
+package iqregister
+category extension
+targetNamespace jabber:iq:register {
+
+*query ::= set {
+  fields set {
+      registered boolean element:bool
+      instructions string element:cdata
+      username string element:cdata
+      nick string element:cdata
+      password string element:cdata
+      name string element:cdata
+      first string element:cdata
+      last string element:cdata
+      email string element:cdata
+      address string element:cdata
+      city string element:cdata
+      state string element:cdata
+      zip string element:cdata
+      phone string element:cdata
+      url string element:cdata
+      date string element:cdata
+      misc string element:cdata
+      text string element:cdata
+      key string element:cdata
+    }
+    remove boolean element:bool
+    xdata extension(jabber:x:data x)
+    xoob  extension(jabber:x:oob x)
+  } element(query)  
+
+}

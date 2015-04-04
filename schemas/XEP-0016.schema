@@ -1,0 +1,44 @@
+package privacy
+category extension
+targetNamespace jabber:iq:privacy {
+
+  *privacy ::= set {
+     active
+     default
+     list sequence of list
+  } element(query)
+
+  active ::= set {
+    name string attribute
+    extra string cdata
+  } element
+
+  default ::= set {
+    name string attribute
+    extra string cdata
+  } element
+
+  list ::= set {
+    name string attribute required
+    items sequence of item
+  } element
+
+  item ::= set {
+    action enum {
+      allow
+      deny
+    } attribute required
+    order uint attribute required
+    type enum {
+      group
+      jid
+      subscription
+    } attribute
+    value string attribute 
+    iq boolean element:bool
+    message boolean element:bool
+    presence-in boolean element:bool
+    presence-out boolean element:bool
+  } element
+}
+

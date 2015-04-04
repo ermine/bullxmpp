@@ -1,0 +1,11 @@
+package caps
+category extension
+targetNamespace http://jabber.org/protocol/caps {
+
+  caps ::= set {
+    ext string attribute
+    hash string attribute required
+    node string attribute required
+    ver string attribute required
+  } element(c)
+}

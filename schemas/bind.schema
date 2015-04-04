@@ -1,0 +1,9 @@
+package bind
+category core
+targetNamespace urn:ietf:params:xml:ns:xmpp-bind {
+
+  *bind ::= set {
+    resource string element:cdata
+    jid jid element:cdata
+  } element
+}

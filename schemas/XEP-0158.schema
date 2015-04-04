@@ -1,0 +1,7 @@
+package captcha
+category extension
+targetNamespace urn:xmpp:captcha {
+  *captcha ::= set {
+   xdata extension(jabber:x:data x) required
+  } element
+}

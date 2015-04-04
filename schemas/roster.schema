@@ -1,0 +1,26 @@
+package roster
+category core
+targetNamespace jabber:iq:roster {
+
+  *roster ::= set {
+    ver string attribute
+    items sequence of item
+  } element(query)
+
+  item ::= set {
+    approved boolean attribute
+    ask enum {
+      subscribe
+    } attribute
+    jid jid attribute required
+    name string attribute
+    subscription enum {
+      both
+      from
+      none
+      remove
+      to
+    } attribute default none
+    group sequence of string element:cdata
+  } element
+}

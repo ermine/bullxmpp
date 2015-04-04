@@ -1,0 +1,7 @@
+"Rule: ocaml: ml -> cmo & cmi (%=ucd_reader )": "=Ê–ø=Iã_\rm4†ßW6"
+"Resource: /usr/home/ermine/devel/go/src/bull-xmpp/jid/bst.ml": ".È\022õ‚\tkìv°XDÓ™v"
+"Resource: /usr/home/ermine/devel/go/src/bull-xmpp/jid/ucd_reader.ml": "ÆÞ\014O’%²P\026Ô¿B4Ø\023ø"
+"Rule: ocaml: cmo* -> byte (%=ucd_reader )": "ì·Ü]KS'Ðþ¾\031\018›‘žô"
+"Rule: ocaml dependencies ml (%=ucd_reader )": "ø[™Íàö\020Ûx­*eÖ^ç†"
+"Rule: ocaml dependencies ml (%=bst )": "»ËYƒ\028-BËðAò²\014âˆ´"
+"Rule: ocaml: ml -> cmo & cmi (%=bst )": "3¶4\031Ó^}Ë\006í£Y†\ba¦"

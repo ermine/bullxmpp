@@ -1,0 +1,191 @@
+package vcard
+category extension
+targetNamespace vcard-temp {
+
+  *vcard ::= set {
+    VERSION string element:cdata
+    FN string element:cdata
+    N
+    fields sequence {
+      NICKNAME
+      PHOTO
+      BDAY
+      ADR
+      LABEL
+      TEL
+      EMAIL
+      JABBERID
+      MAILER
+      TZ
+      GEO
+      TITLE
+      ROLE
+      LOGO
+      AGENT
+      ORG
+      CATEGORIES
+      NOTE
+      PRODID
+      REV
+      SORT-STRING
+      SOUND
+      UID
+      URL
+      CLASS
+      KEY
+      DESC
+    }
+  } element(vCard)
+                                                                                
+  N ::= set {
+    FAMILY string element:cdata
+    GIVEN string element:cdata
+    NIDDLE string element:cdata
+    PREFIX string element:cdata
+    SUFFIX string element:cdata
+  } element
+                                                                                
+   NICKNAME ::= string element:cdata
+
+  # TODO: choice (type, binval) | extval
+  PHOTO ::= set {
+    TYPE string element:cdata
+    BINVAL string element:cdata
+    EXTVAL string element:cdata
+  } element
+                                                                                
+  BDAY ::= string element:cdata
+                                                                                
+ DOMINTL ::= enum {
+    DOM
+    INTL
+ }
+ 
+ADR ::= set {
+     HOME boolean element:bool
+     WORK boolean element:bool
+     POSTAL boolean element:bool
+     PARCEL boolean element:bool
+     DOMINTL DOMINTL element:name
+     PREF boolean element:bool
+     POBOX string element:cdata
+     EXTADD string element:cdata
+     STREET string element:cdata
+     LOCALITY string element:cdata
+     REGION string element:cdata
+     PCODE string element:cdata
+     CTRY string element:cdata
+   } element
+                                                                                
+   LABEL ::= set {
+     HOME boolean element:bool
+     WORK boolean element:bool
+     POSTAL boolean element:bool
+     PARCEL boolean element:bool
+     DOMINTL DOMINTL element:name
+     PREF boolean element:bool
+     LINE sequence of string element:cdata
+   } element
+                                                                                
+   TEL ::= set {
+     HOME boolean element:bool
+     WORK boolean element:bool
+     VOICE boolean element:bool
+     FAX boolean element:bool
+     PAGER boolean element:bool
+     MSG boolean element:bool
+     CELL boolean element:bool
+     VIDEO boolean element:bool
+     BBS boolean element:bool
+     MODEM boolean element:bool
+     ISDN boolean element:bool
+     PCS boolean element:bool
+     PREF boolean element:bool
+     NUMBER string element:cdata
+   } element
+                                                                                
+   EMAIL ::= set {
+     HOME boolean element:bool
+     WORK boolean element:bool
+     INTERNET boolean element:bool
+     PREF boolean element:bool
+     X400 boolean element:bool
+     USERID string element:cdata
+   } element
+                                                                                
+  JABBERID ::= string element:cdata
+                                                                                
+  MAILER ::= string element:cdata
+                                                                                
+  TZ ::= string element:cdata
+                                                                                
+  GEO ::= set {
+    LAT string element:cdata
+    LON string element:cdata
+  } element
+                                                                                
+  TITLE ::= string element:cdata
+                                                                                
+  ROLE ::= string element:cdata
+                                                                                
+  # TODO: choice (type, binval) | extval
+  LOGO ::= set {
+    TYPE string element:cdata
+    BINVAL string element:cdata
+    EXTVAL string element:cdata
+  } element
+
+  EXTVAL ::= string element:cdata
+
+  AGENT ::= choice {
+    vcard
+    EXTVAL
+  } element
+                                                                                
+  ORG ::= set {
+    ORGNAME string element:cdata
+    ORGUNIT sequence of string element:cdata
+  } element
+                                                                                
+  CATEGORIES ::= set {
+    KEYWORD sequence of string element:cdata
+  } element
+                                                                                
+  NOTE ::= string element:cdata
+                                                                                
+  PRODID ::= string element:cdata
+                                                                                
+  REV ::= string element:cdata
+                                                                                
+  SORT-STRING ::= string element:cdata
+                                                                                
+  SOUND ::= set {
+    type enum {
+      PHONETIC
+      BINVAL
+      EXTVAL
+    } name
+    value string cdata
+  } element
+                                                                                
+  PHONETIC ::= string element:cdata
+                                                                                
+  UID ::= string element:cdata
+                                                                                
+  URL ::= string element:cdata
+                                                                                
+  DESC ::= string element:cdata
+                                                                                
+  CLASS ::= set {
+    type enum {
+      PUBLIC
+      PRIVATE
+      CONFIDENTIAL
+    } element:name
+  } element
+                                                                                
+  KEY ::= set {
+    TYPE string element:cdata
+    CRED string element:cdata
+  } element
+}                                                                                

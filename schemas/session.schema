@@ -1,0 +1,6 @@
+package session
+category core
+targetNamespace urn:ietf:params:xml:ns:xmpp-session {
+
+  *session ::= set {} element
+}
