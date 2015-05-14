@@ -36,7 +36,7 @@ type MechanismImpl struct {
 
 var Mechanisms = []MechanismImpl {
 //	MechanismImpl{"SCRAM-SHA-1", sasl_SCRAM_SHA_1},
-//	MechanismImpl{"DIGEST-MD5", sasl_DIGEST_MD5},
+	MechanismImpl{"DIGEST-MD5", sasl_DIGEST_MD5},
 	MechanismImpl{"PLAIN", sasl_PLAIN},
 }
 
@@ -102,7 +102,6 @@ func sasl_DIGEST_MD5(strm *stream.Stream, password string) error {
 		realm := strm.Jid.Domain
 		qop_list := strings.Split(tokens["qop"], ",")
 		exists := false
-		fmt.Println(qop_list)
 		for _, x := range qop_list {
 			if x == "auth" {
 				exists = true
@@ -183,13 +182,10 @@ func sasl_SCRAM_SHA_1(strm *stream.Stream, password string) error {
 		if resp == nil { return stream.ErrUnexpectedEOF }
 		switch rsp := resp.(type) {
 		case *sasl.Success:
-			fmt.Println("success ", string(rsp.Data))
 			var t []byte
 			if t, err = base64.StdEncoding.DecodeString(string(rsp.Data)); err != nil { return err }
-			fmt.Println(string(t))
 			tokens = scram_attributes(string(t))
 			v := tokens["v"]
-			fmt.Println("v ", v)
 			if t, err = base64.StdEncoding.DecodeString(v); err != nil { return err }
 			if string(t) != string(serverSignature) {
 				return errors.New("Server Signature mismatch")

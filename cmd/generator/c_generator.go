@@ -53,8 +53,8 @@ func c_generate_file_h(file *os.File, filename string, schema *Schema) error {
 	forwards := c_getForwards_schema(schema)
 	file.WriteString("#ifndef _" + c_uppercase(filename) + "_H_\n")
 	file.WriteString("#define  _" +  c_uppercase(filename) + "_H_\n\n")
-	file.WriteString("#include <libxml/xmlreader.h>\n")
-	file.WriteString("#include <libxml/xmlwriter.h>\n")
+	file.WriteString("#include \"xmlreader.h\"\n")
+	file.WriteString("#include \"xmlwriter.h\"\n")
 	file.WriteString("#include <string.h>\n")
 	file.WriteString("#include \"xstream.h\"\n")
 	file.WriteString("#include \"types.h\"\n")
@@ -279,14 +279,14 @@ func c_generate_structs(file *os.File, target *Target) error {
 		case SequenceOf:
 			if t == "extension" {
 				// file.WriteString("struct " + c_makeType(target.Name, def.Name) + "{\n")
-				// file.WriteString("  llist_t *extensions;\n")
+				// file.WriteString("  vlist_t *extensions;\n")
 				// file.WriteString("};\n")
-				file.WriteString("typedef llist_t " + c_makeType(target.Name, def.Name) + ";\n")
+				file.WriteString("typedef vlist_t " + c_makeType(target.Name, def.Name) + ";\n")
 			} else {
 				// field := c_getFieldByName(target, string(t))
 				// file.WriteString(c_referenceType(target, field) + " *" + c_makeIdent(def.Name) + ";\n")
-				// file.WriteString("llist_t *" + c_makeIdent(def.Name) + ";\n")
-				file.WriteString("typedef llist_t " + c_makeType(target.Name, def.Name) + ";\n")
+				// file.WriteString("vlist_t *" + c_makeIdent(def.Name) + ";\n")
+				file.WriteString("typedef vlist_t " + c_makeType(target.Name, def.Name) + ";\n")
 			}
 		case string:
 			var typ string
@@ -298,7 +298,10 @@ func c_generate_structs(file *os.File, target *Target) error {
 				}
 				typ = c_referenceType(target, field)
 			}
-			file.WriteString("typedef " + typ + c_makeType(target.Name, def.Name) + ";\n")
+				if typ[len(typ)-1] == '*' {
+					typ = typ[:len(typ)-1]
+				}
+			file.WriteString("typedef " + typ + " " + c_makeType(target.Name, def.Name) + ";\n")
 		case Set:
 			file.WriteString("struct " + c_makeType(target.Name, def.Name) + " {\n")
 			if err = c_generate_fields(file, target, []*Field(t)); err != nil { return err }
@@ -349,8 +352,8 @@ func c_generate_enums(file *os.File, target *Target, enums []*Field) {
 		file.WriteString("};\n\n")
 		v := t[:len(t)-2]
 		file.WriteString("enum " + c_makeType(target.Name, x.Name) + " enum_" + v +
-			"_from_string(const xmlChar *value);\n")
-		file.WriteString("xmlChar *enum_" + v + "_to_string(enum " + t + ");\n")
+			"_from_string(const char* value);\n")
+		file.WriteString("const char* enum_" + v + "_to_string(enum " + t + ");\n")
 	}
 }
 
@@ -363,14 +366,14 @@ func c_generate_fields(file *os.File, target *Target, fields []*Field) error {
 		case string:
 			switch t {
 				case "bytestring":
-				// file.WriteString("  uint8_t *" + c_makeIdent(x.Name) + ";\n")
-				file.WriteString("  const unsigned char *" + c_makeIdent(x.Name) + ";\n")
+				file.WriteString("  unsigned char* " + c_makeIdent(x.Name) + ";\n")
+				file.WriteString("  int " + c_makeIdent(x.Name) + "_len;\n")
 			case "boolean":
 				if x.EncodingRule != nil && (x.EncodingRule.Type == "attribute" ||
 					x.EncodingRule.Type == "element:cdata") { 
-					file.WriteString("  boolean_t* " + c_makeIdent(x.Name) + ";\n")
+					file.WriteString("  bool* " + c_makeIdent(x.Name) + ";\n")
 				} else {
-					file.WriteString("  boolean_t " + c_makeIdent(x.Name) + ";\n")
+					file.WriteString("  bool " + c_makeIdent(x.Name) + ";\n")
 				}
 			default:
 				var typ string
@@ -391,7 +394,7 @@ func c_generate_fields(file *os.File, target *Target, fields []*Field) error {
 		case SequenceOf:
 			switch t {
 			case "extension":
-				file.WriteString("  llist_t *" + c_makeIdent(x.Name) + ";\n")
+				file.WriteString("  vlist_t *" + c_makeIdent(x.Name) + ";\n")
 			default:
 				/*
 				field := c_getFieldByName(target, string(t))
@@ -407,7 +410,7 @@ func c_generate_fields(file *os.File, target *Target, fields []*Field) error {
 					}
 				}
 */
-				file.WriteString("  llist_t *" + c_makeIdent(x.Name) + ";\n")
+				file.WriteString("  vlist_t *" + c_makeIdent(x.Name) + ";\n")
 			}
 		case Extension:
 			if t.Local != "" {
@@ -418,7 +421,7 @@ func c_generate_fields(file *os.File, target *Target, fields []*Field) error {
 				file.WriteString("  extension_t* " + c_makeIdent(x.Name) + ";\n")
 			}
 		case Sequence:
-			file.WriteString(" llist_t *" + c_makeIdent(x.Name) + ";\n")
+			file.WriteString(" vlist_t *" + c_makeIdent(x.Name) + ";\n")
 		case Choice:
 			file.WriteString(" extension_t *" + c_makeIdent(x.Name) + ";\n")
 		case Set:
@@ -498,7 +501,7 @@ func c_referenceType(target *Target, field *Field) string {
 	return c_simpletype(name)
 }
 
-func c_makeConverterFromValue(target *Target, field *Field) string {
+func c_makeConverterFromValue(target *Target, field *Field, varname string) string {
 	name := field.Name
 	if name == "" {
 		name = field.Type.(string)
@@ -507,24 +510,24 @@ func c_makeConverterFromValue(target *Target, field *Field) string {
 	}
 	for _, x := range target.Fields {
 		if x == field {
-			return "(" + c_referenceType(target, field) + ")"
+			return "(" + c_referenceType(target, field) + ")" + varname
 		}
 		if x.Name == name {
 			if _, ok := x.Type.(Enum); ok {
 				t := c_makeType(target.Name, name)
 				v := t[:len(t)-2]
-				return "enum_" + v + "_from_string"
+				return "enum_" + v + "_from_string(" + varname + ")"
 			} else {
-				return "(" + c_makeType(target.Name, name) + "*)"
+				return "(" + c_makeType(target.Name, name) + "*)" + varname
 			}
 		}
 	}
 	// return "(" + c_simpletype(name) + ")"
 	// return "(" + c_referenceType(target, field) + ")"
-	return ""
+	return "(const char*) " + varname
 }
 
-func c_makeConverterToValue(target *Target, field *Field) string {
+func c_makeConverterToValue(target *Target, field *Field, varname string) string {
 	name := field.Name
 	if name == "" {
 		name = field.Type.(string)
@@ -533,21 +536,21 @@ func c_makeConverterToValue(target *Target, field *Field) string {
 	}
 	for _, x := range target.Fields {
 		if x == field {
-			return "(" + c_referenceType(target, field) + ")"
+			return "(" + c_referenceType(target, field) + ")" + varname
 		}
 		if x.Name == name {
 			if _, ok := x.Type.(Enum); ok {
 				t := c_makeType(target.Name, name)
 				v := t[:len(t)-2]
-				return "enum_" + v + "_to_string"
+				return "enum_" + v + "_to_string(" + varname + ")"
 			} else {
-				return "(" + c_makeType(target.Name, name) + "*)"
+				return "(" + c_makeType(target.Name, name) + "*)" + varname
 			}
 		}
 	}
 	// return "(" + c_simpletype(name) + ")"
 	// return "(" + c_referenceType(target, field) + ")"
-	return ""
+	return c_generate_simplevalue_encoder (varname, field)
 }
 
 
@@ -556,13 +559,12 @@ func c_simpletype(s string) string {
 	case "jid": return "jid_t *"
 	case "int": return "int *"
 	case "uint": return "uint32_t *"
-	case "string": return "const xmlChar *"
+	case "string": return "const char*"
 	case "boolean": return "int *"
 	case "langstring": return "langstring_t *"
-	case "xmllang": return "const xmlChar *"
+	case "xmllang": return "const char*"
 	case "bytestring":
-		// return "uint8_t *"
-		return "unsigned char *";
+		return "unsigned char* ";
 	case "extension": return "void *"
 	case "datetime": return "struct tm*"
 	}
@@ -650,7 +652,7 @@ func c_getExternalType(space, local string) (string, error) {
 func c_getSpaceAndName(target *Target, targetNS string, field *Field) (string, string) {
 	if s, ok := field.Type.(string); ok {
 		if s == "xmllang" {
-			return ns_xml, "lang"
+			return "ns_xml", "lang"
 		}
 	}
 	var space, local string
@@ -684,14 +686,14 @@ func c_generate_signatures(file *os.File, target *Target) {
 		case Set, Sequence, SequenceOf, Choice:
 			name := target.Name + "_" + c_normalize(field.Name)
 			file.WriteString("struct " + c_makeType(target.Name, field.Name) + "* " +
-				name + "_decode(xmlTextReaderPtr reader);\n")
-			file.WriteString("int " + name + "_encode(xmlTextWriterPtr writer, struct " +
+				name + "_decode(xmlreader_t* reader);\n")
+			file.WriteString("int " + name + "_encode(xmlwriter_t* writer, struct " +
 				c_makeType(target.Name, field.Name) + "* data);\n")
 		default:
 			name := target.Name + "_" + c_normalize(field.Name)
 			file.WriteString(c_makeType(target.Name, field.Name) + "* " +
-				name + "_decode(xmlTextReaderPtr reader);\n")
-			file.WriteString("int " + name + "_encode(xmlTextWriterPtr writer, " +
+				name + "_decode(xmlreader_t* reader);\n")
+			file.WriteString("int " + name + "_encode(xmlwriter_t* writer, " +
 				c_makeType(target.Name, field.Name) + "* data);\n")
 		}
 	}
@@ -715,7 +717,8 @@ func c_generate_c(schema *Schema) error {
 
 func c_generate_file_c(file *os.File, filename string, schema *Schema) error {
 	var err error
-	file.WriteString("#include \"" + filename + ".h\"\n\n")
+	file.WriteString("#include \"" + filename + ".h\"\n")
+	file.WriteString("#include \"helpers.h\"\n\n")
 	for _, target := range schema.Targets {
 		file.WriteString("const char* ns_" + target.Name + " = \"" + target.Space + "\";\n")
 	}
@@ -729,29 +732,64 @@ func c_generate_file_c(file *os.File, filename string, schema *Schema) error {
 			case Set, Sequence, SequenceOf, Choice:
 				name := target.Name + "_" + c_normalize(field.Name)
 				file.WriteString("struct " + c_makeType(target.Name, field.Name) + "* " +
-					name + "_decode(xmlTextReaderPtr reader) {\n")
-				file.WriteString("  struct " + c_makeType(target.Name, field.Name) + " *elm = NULL;\n")
-				file.WriteString(" elm = malloc (sizeof (" +
-					// c_makeType(target.Name, field.Name) + "));\n")
-					c_referenceType (target, field) + "));\n")
+					name + "_decode(xmlreader_t* reader) {\n")
+				t := c_referenceType(target, field)
+				if t[len(t)-1] == '*' {
+					t = t[:len(t)-1]
+				}
+				if _, ok := field.Type.(SequenceOf); ok {
+					file.WriteString(t + "** elm = NULL;\n")
+					file.WriteString(" elm = malloc (sizeof (" + t + "**));\n")
+					file.WriteString("if (elm == NULL)\n")
+					file.WriteString("fatal (\"" + c_makeType (target.Name, field.Name) + ": malloc failed\");\n")
+					file.WriteString("*elm = NULL;\n")
+				} else {
+					file.WriteString("  struct " + c_makeType(target.Name, field.Name) + " *elm = NULL;\n")
+					file.WriteString(" elm = malloc (sizeof (" + t + "));\n")
+					file.WriteString("if (elm == NULL)\n")
+					file.WriteString("fatal (\"" + c_makeType (target.Name, field.Name) + ": malloc failed\");\n")
+					file.WriteString("memset (elm, 0, sizeof (" + t + "));\n")
+				}
+
 				if err := c_generate_element_decoder(file, target, "elm", field); err != nil { return err }
-				file.WriteString("  return elm;\n")
+				if _, ok := field.Type.(SequenceOf); ok {
+					file.WriteString("  return *elm;\n")
+				} else {
+					file.WriteString("  return elm;\n")
+				}
 				file.WriteString("}\n\n")
-				file.WriteString("int " + name + "_encode(xmlTextWriterPtr writer, struct " +
+				file.WriteString("int " + name + "_encode(xmlwriter_t* writer, struct " +
 					c_makeType(target.Name, field.Name) + "* elm) {\n")
+				file.WriteString("int err = 0;\n")
+				if target.Prefix != "" {
+					file.WriteString("err = xmlwriter_set_prefix (writer, \"" + target.Prefix + "\", ns_" +
+						target.Name + ");\n")
+					file.WriteString("if (err != 0) return err;\n")
+				}
 				if err := c_generate_element_encoder(file, target, "elm", field); err != nil { return err }
 				file.WriteString("  return 0;\n")
 				file.WriteString("}\n\n")				
 			default:
 				name := target.Name + "_" + c_normalize(field.Name)
 				file.WriteString(c_makeType(target.Name, field.Name) + "* " +
-					name + "_decode(xmlTextReaderPtr reader) {\n")
+						name + "_decode(xmlreader_t* reader) {\n")
 				file.WriteString("  " + c_makeType(target.Name, field.Name) + " *elm = NULL;\n")
 				c_generate_element_decoder(file, target, "elm", field)
-				file.WriteString("  return elm;\n")
+				if _, ok := field.Type.(SequenceOf); ok {
+					file.WriteString("  return *elm;\n")
+				} else {
+					file.WriteString("  return elm;\n")
+				}
 				file.WriteString("}\n\n")
-				file.WriteString("int " + name + "_encode(xmlTextWriterPtr writer, " +
-					c_makeType(target.Name, field.Name) + "* elm) {\n")
+				file.WriteString("int " + name + "_encode(xmlwriter_t* writer, " +
+						c_makeType(target.Name, field.Name) + "* elm) {\n")
+				file.WriteString("int err = 0;\n")
+				if target.Prefix != "" {
+					file.WriteString("err = xmlwriter_set_prefix (writer, \"" + target.Prefix + "\", ns_" +
+						target.Name + ");\n")
+					file.WriteString("if (err != 0) return err;\n")
+				}
+				if err := c_generate_element_encoder(file, target, "elm", field); err != nil { return err }
 				file.WriteString("  return 0;\n")
 				file.WriteString("}\n\n")
 			}
@@ -769,93 +807,108 @@ func c_generate_element_decoder(file *os.File, target *Target, prefix string, el
 	case "element:cdata":
 		c_generate_cdata_decoder(file, target, prefix, element)
 	case "element:bool":
-		file.WriteString("if (xstream_skip(reader) != 0) {\n    return NULL;\n  }\n")
+		file.WriteString("if (xmlreader_skip_element (reader) == 1) return NULL;\n")
 	case "startelement", "element":
 		switch typ := element.Type.(type) {
 		case string:
 			return errors.New("dont know what todo with " + typ)
 		case Extension:
-			file.WriteString("  int ret = xmlTextReaderRead (reader);\n")
-			file.WriteString("  while (ret == 1) {\n")
-			file.WriteString("  if (xmlTextReaderNodeType (reader) == 15) {\n")
-			file.WriteString("    break;\n")
-			file.WriteString("  }\n")
+			file.WriteString("int type = 0;\n")
+			file.WriteString("  while (1) {\n")
+			file.WriteString("type = xmlreader_next (reader);\n")
+			file.WriteString("if (type == XML_END_ELEMENT) break;\n")
+			file.WriteString("if (type == XML_ERROR) return NULL;\n")
+			file.WriteString("if (type == XML_START_ELEMENT) {\n")
 			if typ.Local != "" {
 				// fieldname, err := c_getExternalType(typ.Space, typ.Local)
-				file.WriteString(" const xmlChar* name = xmlTextReaderConstName (reader);\n")
-				file.WriteString("const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
-				file.WriteString("if ((strcmp ((char*) namespace, \"" +
-					typ.Space + "\") == 0) && (strcmp ((char *) name, \"" + typ.Local + "\") == 0)) {\n")
-				file.WriteString("  extension_t* newel = xstream_extension_decode (reader);\n")
+				file.WriteString("const char* name = xmlreader_get_name (reader);\n")
+				file.WriteString("const char* namespace = xmlreader_get_namespace (reader);\n")
+				file.WriteString("if ((strcmp (namespace, \"" + typ.Space +
+					"\") == 0) && (strcmp (name, \"" + typ.Local + "\") == 0)) {\n")
+				file.WriteString("extension_t* newel = xstream_extension_decode (reader);\n")
+				file.WriteString("if (reader->err != 0) return NULL;\n")
 				file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
-				file.WriteString("// here?\n")
 				if prefix == "elm" {
-					file.WriteString(prefix + " = " + c_makeConverterToValue(target, element) + "(newel);\n")
+					file.WriteString(prefix + " = " +
+						c_makeConverterToValue(target, element, "newel") + ";\n")
 				} else {
 					file.WriteString(prefix + " = newel;\n")
 				}
 				file.WriteString("} else {\n")
-				file.WriteString("if (xstream_skip(reader) != 0) {\n    return NULL;\n  }\n")
+				file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 				file.WriteString("}\n")
 			} else {
 				file.WriteString("extensiont_t* newel = xstream_extension_decode (reader);\n")
+				file.WriteString("if (reader->err != 0) return NULL;\n")
 				file.WriteString("if (newel != NULL) {\n")
 				if prefix == "elm" {
-					file.WriteString(prefix + " = " + c_makeConverterToValue(target, element) + "(newel);\n")
+					file.WriteString(prefix + " = " +
+						c_makeConverterToValue(target, element, "(newel") + ";\n")
 				} else {
 					file.WriteString(prefix + " = newel;\n")
 				}
 				file.WriteString("} else {\n")
-				file.WriteString("if (xstream_skip (reader) != 0) {\n  return NULL;\n  }\n")
+				file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 				file.WriteString("}\n")
 			}
+			file.WriteString("}\n")
+//			file.WriteString("}\n")
 			file.WriteString("}\n")
 		case Set:
 			fields := []*Field(typ)
 			if len(fields) == 0 {
-				file.WriteString("if (xstream_skip(reader) != 0) {\n    return NULL;\n  }\n")
+				file.WriteString("if (xmlreader_skip_element (reader) == -1)return NULL;\n")
 			} else {
-				if err := c_generate_element_set_decoder(file, target, prefix, fields); err != nil {
-					return err
+				close, err := c_generate_element_set_decoder(file, target, prefix, fields)
+				if err != nil { return err }
+				if element.EncodingRule.Type != "startelement" && close {
+					file.WriteString("if (xmlreader_skip_element (reader) != -1) return NULL;\n")
 				}
 			}
 		case Choice:
 			fields := []*Field(typ)
-			file.WriteString("  int ret = xmlTextReaderRead (reader);\n")
-			file.WriteString("  while (ret == 1) {\n")
-			file.WriteString("  if (xmlTextReaderNodeType (reader) == XML_ELEMENT_NODE) {\n")
+			file.WriteString("int type = 0;\n")
+			file.WriteString("  while (1) {\n")
+			file.WriteString("type = xmlreader_next (reader);\n")
+			file.WriteString("if (type == XML_END_ELEMENT) break;\n")
+			file.WriteString("if (type == XML_ERROR) return NULL;\n")
+			file.WriteString("if (type == XML_START_ELEMENT) {\n")
 			for _, z := range fields {
 				space, local := c_getSpaceAndName(target, target.Space, z)
-				file.WriteString(" if ((strcmp ((char*) namespace, " + space +
+				file.WriteString(" if ((strcmp (namespace, " + space +
 					") == 0) && (strcmp (name,  \"" + local + "\") == 0)) {\n")
 				file.WriteString("  extension_t *newel = xstream_extension_decode(reader);\n")
+				file.WriteString("if (reader->err != 0) return NULL;\n")
 				file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
 				file.WriteString(prefix + "->u = (" + c_referenceType(target, element) + "*) newel;\n")
 				file.WriteString("  }\n")
 			}
 			file.WriteString("}\n")
-			file.WriteString("  if (xmlTextReaderNodeType (reader) == 15) {\n")
-			file.WriteString("break;\n")
 			file.WriteString(" }\n")
-			file.WriteString("}\n")
 			
 		case SequenceOf:
 			field := string(typ)
-			file.WriteString("  int ret = xmlTextReaderRead (reader);\n")
-			file.WriteString("  while (ret == 1) {\n")
+			file.WriteString("int type = 0;\n")
+			file.WriteString("  while (1) {\n")
+			file.WriteString("type = xmlreader_next (reader);\n")
+			file.WriteString("if (type == XML_END_ELEMENT) break;\n")
+			file.WriteString("if (type == XML_ERROR) return NULL;\n")
+			file.WriteString("if (type == XML_START_ELEMENT) {\n")
 			if field == "extension" {
 				name := prefix + "->" + element.Name
 				if prefix == "elm" {
-					// name = prefix + "->extensions"
 					name = prefix
+				} else {
+					name = "&" + name
 				}
 				file.WriteString("    extension_t *newel = xstream_extension_decode (reader);\n")
+				file.WriteString("if (reader->err != 0) return NULL;\n")
 				file.WriteString("    if (newel != NULL) {\n")
-				file.WriteString("      llist_append((llist_t*)" + name + ", newel->data, newel->type);\n")
-				file.WriteString("free(newel);\n")
-				file.WriteString("     }\n")
-				file.WriteString("     ret = xmlTextReaderRead (reader);\n")
-				// file.WriteString("   }\n")
+				file.WriteString("      vlist_append((vlist_t**) " + name + ", newel->data, newel->type);\n")
+				file.WriteString("free (newel);\n")
+				file.WriteString("} else {\n")
+				file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
+				file.WriteString("}\n")
 			} else {
 				f := c_getFieldByName(target, field)
 				if f == nil {
@@ -863,22 +916,25 @@ func c_generate_element_decoder(file *os.File, target *Target, prefix string, el
 					return errors.New("dont know what to do with " + field)
 				}
 				space, local := c_getSpaceAndName(target, target.Space, f)
-				file.WriteString("const xmlChar* name = xmlTextReaderConstName (reader);\n")
-				file.WriteString("const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
-				file.WriteString("if ((strcmp ((char*) namespace, " + space +
-					") == 0) && (strcmp ((char*) name, \"" + local + "\") == 0)) {\n")
+				file.WriteString("const char* name = xmlreader_get_name (reader);\n")
+				file.WriteString("const char* namespace = xmlreader_get_namespace (reader);\n")
+				file.WriteString("if ((strcmp (namespace, " + space +
+					") == 0) && (strcmp (name, \"" + local + "\") == 0)) {\n")
 				decoder, err := c_getExtensionDecoder(space, local)
 				if err != nil { return err }
 				file.WriteString(c_referenceType(target, f) + " newel = " + decoder + "(reader);\n")
 				file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
-				file.WriteString("  llist_append((llist_t *)" + prefix +
+				name := prefix
+				if name != "elm" {
+					name = "&" + name
+				}
+				file.WriteString("  vlist_append ((vlist_t **) " + name +
 					", (void*) newel, EXTENSION_TYPE_" +
 					c_uppercase(target.Name + "_" + c_normalize(f.Name)) + ");\n")
 				file.WriteString("}\n")
 			}
 			file.WriteString("}\n")
-			// handle endTag
-			// file.WriteString("}\n")
+			file.WriteString("}\n")
 		}
 	}
 	return nil
@@ -896,80 +952,86 @@ func c_generate_cdata_decoder(file *os.File, target *Target, prefix string, fiel
 	}
 	switch typ {
 	case "string":
-		file.WriteString("const xmlChar *value = xmlTextReaderConstValue (reader);\n")
+		file.WriteString("const char* value = xmlreader_text (reader);\n")
+		file.WriteString("if (reader->err != 0) return NULL;\n")
 		if isarray {
 			if prefix == "elm" {
 				file.WriteString(prefix + " = append(*" + prefix + ", " +
 					c_referenceType(target, field) + "(value));\n")
 			} else {
-				file.WriteString("  llist_append((llist_t*)" + prefix + ", (void*) value, 0);\n")
+				name := prefix
+				if name != "elm" {
+					name = "&" + name
+				}
+				file.WriteString("  vlist_append ((vlist_t**) " + name + ", (void*) value, 0);\n")
 			}
 		} else {
 //			if prefix == "elm" {
-				file.WriteString(prefix + " = " +  c_makeConverterFromValue(target, field) + "(value);\n")
+			file.WriteString(prefix + " = " +  c_makeConverterFromValue(target, field, "value") + ";\n")
 //			} else {
 //				file.WriteString(prefix + " = value;\n")
 //			}
 		}
 	case "jid":
-		file.WriteString("const xmlChar* s = xmlTextReaderConstValue(reader);\n")
+		file.WriteString("const char* s = xmlreader_text (reader);\n")
+		file.WriteString("if (reader->err != 0) return NULL;\n")
 		file.WriteString("  jid_t *jid = jid_of_string((const char*) s);\n")
 		if isarray {
-			file.WriteString("  llist_append((llist_t*)" + prefix + ", (void*) jid, 0);\n")
+			file.WriteString("  vlist_append ((vlist_t**) &" + prefix + ", (void*) jid, 0);\n")
 		} else {
 			file.WriteString(prefix + " = jid;\n")
 		}
 	case "bytestring":
 		if isarray {
-			file.WriteString("unsigned char* *content;\n")
-			file.WriteString("content = xmlTextReaderReadBase64(reader);\n")
-			file.WriteString("llist_append(" + prefix + ", content, 0);\n")
+			file.WriteString("todo();\n")
 		} else {
-			file.WriteString(prefix + " = xmlTextReaderReadBase64(reader);\n")
+			file.WriteString("if (xmlreader_base64 (reader, &" + prefix + ", &" + prefix + "_len) != 0) return NULL;\n")
 		}
 	case "uint":
-		file.WriteString(" const xmlChar* s = xmlTextReaderConstValue (reader);\n")
+		file.WriteString(" const char* s = xmlreader_text (reader);\n")
+		file.WriteString("if (reader->err != 0) return NULL;\n")
 		if isarray {
-			file.WriteString("  llist_append(*" + prefix + "strconv_parse_uint64 (s), 0);\n")
+			file.WriteString("  vlist_append (&*" + prefix + "strconv_parse_uint64 (s), 0);\n")
 		} else {
 			file.WriteString("  " + prefix + " = strconv_parse_uint64 (s);\n")
 		}
 	case "int":
-		file.WriteString(" const xmlChar* s = xmlTextReaderConstValue (reader);\n")
+		file.WriteString(" const char* s = xmlreader_text (reader);\n")
+		file.WriteString("if (reader->err != 0) return NULL;\n")
 		if isarray {
-			file.WriteString("  llist_append(*" + prefix + ", strconv_parse_int (s), 0);\n")
+			file.WriteString("  vlist_append (&*" + prefix + ", strconv_parse_int (s), 0);\n")
 		} else {
 			file.WriteString("  " + prefix + " = strconv_parse_int (s);\n")
 		}
 	case "datetime":
-		file.WriteString(" const xmlChar* s = xmlTextReaderConstValue (reader);\n")
+		file.WriteString(" const char* s = xmlreader_text (reader);\n")
+		file.WriteString("if (reader->err != 0) return NULL;\n")
 		file.WriteString("if tm, err = time.Parse(time.RFC3339, s); err != nil { return err }")
 		if isarray {
 			file.WriteString("struct tm* datetime = datetime_parse(s);\n")
-			file.WriteString("llist_append (" + prefix + ", (void*) datetime, 0);\n")
+			file.WriteString("vlist_append (&" + prefix + ", (void*) datetime, 0);\n")
 		} else {
 			file.WriteString(prefix + " = datetime_parse(s);\n")
 		}
 	default:
 		f := &Field{Type:field.Type.(string)}
-		file.WriteString(" const xmlChar* s = xmlTextReaderConstValue (reader);\n")
+		file.WriteString(" const char* s = xmlreader_text (reader);\n")
+		file.WriteString("if (reader->err != 0) return NULL;\n")
 		if isarray {
 			file.WriteString(prefix + " = append(*" + prefix + ", " +
 				c_referenceType(target, f) + "(s));\n")
 		} else {
-			file.WriteString("//herace1\n")
-			file.WriteString(prefix + " = " + c_makeConverterFromValue(target, f) + "(s);\n")			
+			file.WriteString(prefix + " = " + c_makeConverterFromValue(target, f, "s") + ";\n")
 		}
 	}
 }
 
-func c_generate_element_set_decoder(file *os.File, target *Target, prefix string, fields []*Field) error {
+func c_generate_element_set_decoder(file *os.File, target *Target, prefix string, fields []*Field) (bool, error) {
 	sep := "->"
 	if prefix != "elm" {
 		sep = "."
 	}
-	file.WriteString("// element set\n")
-	var err error
+	// var err error
 	var attrs []*Field
 	for _, x := range fields {
 		if x.EncodingRule != nil && x.EncodingRule.Type == "attribute" {
@@ -977,14 +1039,14 @@ func c_generate_element_set_decoder(file *os.File, target *Target, prefix string
 		}
 	}
 	if len(attrs) > 0 {
-		file.WriteString("  const xmlChar *avalue;\n")
+		file.WriteString("  const char* avalue;\n")
 	}
 	for _, x := range attrs {
 		space, local := c_getSpaceAndName(target, "", x)
 		if space == ns_xml {
 			local = "xml:" + local
 		}
-		file.WriteString("  avalue = xmlTextReaderGetAttribute (reader, (const xmlChar*) \"" + local + "\");\n")
+		file.WriteString("  avalue = xmlreader_attribute (reader, NULL, \"" + local + "\");\n")
 		file.WriteString("  if (avalue != NULL) {\n")
 		c_generate_simplevalue_decoder(file, target, prefix + sep + c_makeIdent(x.Name), "avalue", x)
 		file.WriteString("  }\n")
@@ -1017,18 +1079,20 @@ Loop:
 	}
 	if len(elems) > 0 || any != nil {
 		elseif := false
-		file.WriteString("  int ret = xmlTextReaderRead (reader);\n")
-		file.WriteString("  while (ret == 1) {\n")
-		file.WriteString("//while here0\n")
-		file.WriteString("const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
-		file.WriteString("const xmlChar* name = xmlTextReaderConstName (reader);\n")
-		
+		file.WriteString("int type = 0;\n")
+		file.WriteString("  while (1) {\n")
+		file.WriteString("type = xmlreader_next (reader);\n")
+		file.WriteString("if (type == XML_END_ELEMENT) break;\n")
+		file.WriteString("if (type == XML_ERROR) return NULL;\n")
+		file.WriteString("if (type == XML_START_ELEMENT) {\n")
+		file.WriteString("const char* namespace = xmlreader_get_namespace (reader);\n")
+		file.WriteString("const char* name = xmlreader_get_name (reader);\n")
 		for _, x := range elems {
 			if x.EncodingRule != nil {
 				space, local := c_getSpaceAndName(target, target.Space, x)
 				if !elseif {
-					// file.WriteString("    const xmlChar* name = xmlTextReaderConstName (reader);\n")
-					// file.WriteString("    const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
+					// file.WriteString("    const char* name = xmlreader_get_name (reader);\n")
+					// file.WriteString("    const char* namespace = xmlreader_get_namespace (reader);\n")
 				}				
 				if elseif {
 					file.WriteString("  else if")
@@ -1036,14 +1100,12 @@ Loop:
 					elseif = true
 					file.WriteString(" if")
 				}
-				file.WriteString(" ((strcmp ((char*) name, \"" + local +
-					"\") == 0) && (strcmp ((char*) namespace, " + space + ") == 0)) {\n")
+				file.WriteString(" ((strcmp (name, \"" + local +
+					"\") == 0) && (strcmp (namespace, " + space + ") == 0)) {\n")
 				switch x.EncodingRule.Type {
 				case "element:bool":
 					file.WriteString("    " + prefix + sep + c_makeIdent(x.Name) + " = true;\n")
-					file.WriteString("  if (xstream_skip (reader) != 0) {\n")
-					file.WriteString("    return NULL;\n")
-					file.WriteString("  }\n")
+					file.WriteString("  if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 					file.WriteString("  continue;\n")
 				case "element:cdata":
 					c_generate_cdata_decoder(file, target, prefix + sep + c_makeIdent(x.Name), x)
@@ -1055,49 +1117,55 @@ Loop:
 								prefix + sep + c_makeIdent(x.Name) + ");\n")
 						} else {
 							file.WriteString(prefix + sep + c_makeIdent(x.Name) +
-								" = xmlTextReaderConstValue (reader);\n")
+								" = xmlreader_text (reader);\n")
+							file.WriteString("if (reader->err != 0) return NULL;\n")
 						}
 					case Set:
 						fields := []*Field(typ)
-						if err = c_generate_element_set_decoder(file, target, prefix + sep + c_makeIdent(x.Name),
-							fields); err != nil { return err }
+						close, err := c_generate_element_set_decoder(file, target,
+							prefix + sep + c_makeIdent(x.Name), fields)
+						if err != nil { return false, err }
+						if close {
+							file.WriteString("if (xmlreader_skip_element (reader) != -1) return NULL;\n")
+						}
 					case SequenceOf:
 						field := c_getFieldByName(target, string(typ))
 						if field == nil {
-							return errors.New("Cannot find field " + string(typ))
+							return false, errors.New("Cannot find field " + string(typ))
 						}
 						space, local := c_getSpaceAndName(target, target.Space, field)
-						file.WriteString("  int ret = xmlTextReaderRead (reader);\n")
-						file.WriteString("  while (ret == 1) {\n")
-						file.WriteString("//while here2\n")
-						file.WriteString("  if (xmlTextReaderNodeType (reader) == XML_ELEMENT_NODE) {\n")
-						// file.WriteString("    const xmlChar* name = xmlTextReaderConstName (reader);\n")
-						// file.WriteString("    const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
-						file.WriteString("  if ((strcmp((char *) namespace, " + space +
-							") == 0) && (strcmp ((char*) name, \"" + local + "\") == 0)) {\n")
+						file.WriteString("int type = 0;\n")
+						file.WriteString("  while (1) {\n")
+						file.WriteString("type = xmlreader_next (reader);\n")
+						file.WriteString("if (type == XML_END_ELEMENT) break;\n")
+						file.WriteString("if (type == XML_ERROR) return NULL;\n")
+						file.WriteString("if (type == XML_START_ELEMENT) {\n")
+						// file.WriteString("    const char* name = xmlreader_get_name (reader);\n")
+						// file.WriteString("    const char* namespace = xmlreader_get_namespace (reader);\n")
+						file.WriteString("  if ((strcmp(namespace, " + space +
+							") == 0) && (strcmp (name, \"" + local + "\") == 0)) {\n")
 						decoder, err := c_getExtensionDecoder(space, local)
-						if err != nil { return err }
+						if err != nil { return false, err }
 						file.WriteString(c_referenceType(target, field) + " newel = " + decoder + "(reader);\n")
 						file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
-						file.WriteString("  llist_append((llist_t*)" + prefix + sep + c_makeIdent(x.Name) +
+						file.WriteString("  vlist_append ((vlist_t**) &" + prefix + sep + c_makeIdent(x.Name) +
 							", (void*) newel, EXTENSION_TYPE_" +
 							c_uppercase(target.Name + "_" + c_normalize(field.Name)) + ");\n")
 						file.WriteString("}\n")
-						file.WriteString("  if (xmlTextReaderNodeType (reader) == 15) {\n")
-						file.WriteString("break;\n")
 						file.WriteString("  }\n")
 						file.WriteString("}\n")
-						file.WriteString("}\n")
 					case Sequence:
-						file.WriteString("  int ret = xmlTextReaderRead (reader);\n")
-						file.WriteString("  while (ret == 1) {\n")
-						file.WriteString("//while here1\n")						
-						file.WriteString("  if (xmlTextReaderNodeType (reader) == XML_ELEMENT_NODE) {\n")
+						file.WriteString("int type = 0;\n")
+						file.WriteString("  while (1) {\n")
+						file.WriteString("type = xmlreader_next (reader);\n")
+						file.WriteString("if (type == XML_END_ELEMENT) break;\n")
+						file.WriteString("if (type == XML_ERROR) return NULL;\n")
+						file.WriteString("if (type == XML_START_ELEMENT) {\n")
 						for _, z := range []*Field(typ) {
 							space, local := c_getSpaceAndName(target, target.Space, z)
 							if !elseif {
-								// file.WriteString("    const xmlChar* name = xmlTextReaderConstName (reader);\n")
-								// file.WriteString("    const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
+								// file.WriteString("    const char* name = xmlreader_get_name (reader);\n")
+								// file.WriteString("    const char* namespace = xmlreader_get_namespace (reader);\n")
 							}
 							if elseif {
 								file.WriteString("  else if")
@@ -1108,40 +1176,38 @@ Loop:
 							file.WriteString(" ((strcmp (space, " + space +
 								") == 0) && (strcmp (name, \"" + local + "\") == 0)) {\n")
 							decoder, err := c_getExtensionDecoder(space, local)
-							if err != nil { return err }
+							if err != nil { return false, err }
 							file.WriteString(c_referenceType(target, z) + "  newel = " + decoder + "(reader);\n")
 							file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
-							file.WriteString("  llist_append((llist_t)" +
+							file.WriteString("  vlist_append ((vlist_t**) &" +
 								prefix + sep + c_makeIdent(x.Name) + ", (void*) newel, EXTENSION_TYPE_" +
 								c_uppercase(target.Name + "_" + c_normalize(z.Name)) + ");\n")
 							file.WriteString("  }\n")
 						}
-						file.WriteString("  if (xmlTextReaderNodeType (reader) == 15) {\n")
-						file.WriteString("break;\n")
 						file.WriteString("  }\n")
 						file.WriteString("}\n")
 						file.WriteString("}\n")
 					case Choice:
-						file.WriteString("  int ret = xmlTextReaderRead (reader);\n")
-						file.WriteString("  while (ret == 1) {\n")
-						file.WriteString("//while here\n")
-						file.WriteString("  if (xmlTextReaderNodeType (reader) == XML_ELEMENT_NODE) {\n")
+						file.WriteString("int type = 0;\n")
+						file.WriteString("while (1) {\n")
+						file.WriteString("type = xmlreader_next (reader);\n")
+						file.WriteString("if (type == XML_END_ELEMENT) break;\n")
+						file.WriteString("if (type == XML_ERROR) return NULL;\n")
+						file.WriteString("if (type == XML_START_ELEMENT) {\n")
 						for _, z := range []*Field(typ) {
 							space, local := c_getSpaceAndName(target, target.Space, z)
-							file.WriteString("if (strcmp((char*) namespace, " + space +
-								") == 0 && strcmp((char*)name, \"" + local + "\") == 0)  {\n")
+							file.WriteString("if (strcmp (namespace, " + space +
+								") == 0 && strcmp (name, \"" + local + "\") == 0)  {\n")
 							decoder, err := c_getExtensionDecoder(space, local)
-							if err != nil { return err }
+							if err != nil { return false, err }
 							file.WriteString(c_referenceType(target, z) + " newel = " + decoder + "(reader);")
 							file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
 							file.WriteString(prefix + sep + c_makeIdent(x.Name) + " = (" +
 								c_referenceType(target, z) + ") newel;\n")
-							file.WriteString("if (xstream_skip(reader) != 0) {\n    return NULL;\n  }\n")
+							file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 							file.WriteString("break;\n")
 							file.WriteString("  }\n")
 						}
-						file.WriteString("  if (xmlTextReaderNodeType (reader) == 15) {\n")
-						file.WriteString("break;\n")
 						file.WriteString("}\n")
 						file.WriteString("}\n")
 						file.WriteString("}\n")
@@ -1157,18 +1223,18 @@ Loop:
 						} else {
 							elseif = true
 						}
-						file.WriteString("if (strcmp ((char*) namespace, ns_" + target.Name + ") != 0) {\n")
-						file.WriteString("// zzz\n")
+						file.WriteString("if (strcmp (namespace, ns_" + target.Name + ") != 0) {\n")
 						file.WriteString("  extension_t* newel = xstream_extension_decode (reader);\n")
+				file.WriteString("if (reader->err != 0) return NULL;\n")
 						file.WriteString("  if (newel == NULL) {\n")
-						file.WriteString("if (xstream_skip(reader) != 0) {\n    return NULL;\n  }\n")
+						file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 						file.WriteString("} else {\n")
 						file.WriteString(prefix + sep + c_makeIdent(x.Name) + " = newel;\n")
 						file.WriteString("}\n")
 						file.WriteString("} // end of if strcmp\n")
 					} else {
 						typename, err := c_getExternalType(typ.Space, typ.Local)
-						if err != nil { return err }
+						if err != nil { return false, err }
 						was_elseif := false
 						if elseif {
 							file.WriteString("else ")
@@ -1176,13 +1242,13 @@ Loop:
 						if !elseif {
 							file.WriteString("{\n")
 							was_elseif = true
-							// file.WriteString("    const xmlChar* name = xmlTextReaderConstName (reader);\n")
-							// file.WriteString("    const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
+							// file.WriteString("    const char* name = xmlreader_get_name (reader);\n")
+							// file.WriteString("    const char* namespace = xmlreader_get_namespace (reader);\n")
 						}				
-						file.WriteString(" if ((strcmp ((char*) namespace, \"" + typ.Space +
-							"\") == 0) && (strcmp ((char *) name, \"" + typ.Local + "\") == 0)) {\n")
+						file.WriteString(" if ((strcmp (namespace, \"" + typ.Space +
+							"\") == 0) && (strcmp (name, \"" + typ.Local + "\") == 0)) {\n")
 						decoder, err := c_getExtensionDecoder(typ.Space, typ.Local)
-						if err != nil { return err }
+						if err != nil { return false, err }
 						file.WriteString(typename + " newel = " + decoder + "(reader);\n")
 						file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
 						file.WriteString(prefix + sep + c_makeIdent(x.Name) + " = newel;\n")
@@ -1196,8 +1262,8 @@ Loop:
 					for _, z := range fields {
 						space, local := c_getSpaceAndName(target, target.Space, z)
 						if !elseif {
-							// file.WriteString("    const xmlChar* name = xmlTextReaderConstName (reader);\n")
-							// file.WriteString("    const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
+							// file.WriteString("    const char* name = xmlreader_get_name (reader);\n")
+							// file.WriteString("    const char* namespace = xmlreader_get_namespace (reader);\n")
 						}				
 						if elseif {
 							file.WriteString("  else if")
@@ -1205,8 +1271,8 @@ Loop:
 							elseif = true
 							file.WriteString(" if")
 						}
-						file.WriteString(" ((strcmp ((char*) namespace, " + space +
-							") == 0) && (strcmp ((char*) name, \"" + local + "\") == 0)) {\n")
+						file.WriteString(" ((strcmp (namespace, " + space +
+							") == 0) && (strcmp (name, \"" + local + "\") == 0)) {\n")
 						c_generate_element_decoder(file, target, prefix + sep + c_makeIdent(x.Name) + "." +
 							c_makeIdent(z.Name), z)
 						file.WriteString("  }\n")
@@ -1219,12 +1285,13 @@ Loop:
 						} else {
 							elseif = true
 						}
-						file.WriteString("if (strcmp ((char*) namespace, ns_" + target.Name + ") != 0) {\n")
+						file.WriteString("if (strcmp (namespace, ns_" + target.Name + ") != 0) {\n")
 						file.WriteString("  extension_t* newel = xstream_extension_decode (reader);\n")
+				file.WriteString("if (reader->err != 0) return NULL;\n")
 						file.WriteString("  if (newel == NULL) {\n")
-						file.WriteString("if (xstream_skip(reader) != 0) {\n    return NULL;\n  }\n")
+						file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 						file.WriteString("} else {\n")
-						file.WriteString("  llist_append((llist_t*)" + prefix + sep + c_makeIdent(x.Name) +
+						file.WriteString("  vlist_append ((vlist_t**)&" + prefix + sep + c_makeIdent(x.Name) +
 							", newel->data, newel->type);\n")
 						file.WriteString("free(newel);\n")
 						file.WriteString("}\n")
@@ -1235,8 +1302,8 @@ Loop:
 						if field != nil {
 							space, local := c_getSpaceAndName(target, target.Space, field)
 							if !elseif {
-								// file.WriteString("    const xmlChar* name = xmlTextReaderConstName (reader);\n")
-								// file.WriteString("    const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
+								// file.WriteString("    const char* name = xmlreader_get_name (reader);\n")
+								// file.WriteString("    const char* namespace = xmlreader_get_namespace (reader);\n")
 							}				
 							if elseif {
 								file.WriteString("  else if")
@@ -1244,16 +1311,15 @@ Loop:
 								elseif = true
 								file.WriteString(" if")
 							}
-							file.WriteString(" ((strcmp ((char*) namespace, " + space +
-								") == 0) && (strcmp ((char*) name, \"" + local + "\") == 0)) {\n")
-							file.WriteString("//here\n")
+							file.WriteString(" ((strcmp (namespace, " + space +
+								") == 0) && (strcmp (name, \"" + local + "\") == 0)) {\n")
 							decoder, err := c_getExtensionDecoder(space, local)
-							if err != nil { return err }
+							if err != nil { return false, err }
 							file.WriteString(c_referenceType(target, field) +
 								" newel = " + decoder + "(reader);\n")
 							file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
 							file.WriteString(
-								"  llist_append((llist_t*)" + prefix + sep + c_makeIdent(x.Name) +
+								"  vlist_append ((vlist_t**)&" + prefix + sep + c_makeIdent(x.Name) +
 									", (void*) newel, EXTENSION_TYPE_" +
 									c_uppercase(target.Name + "_" + c_normalize(field.Name)) + ");\n")
 							file.WriteString("  }\n")
@@ -1266,8 +1332,8 @@ Loop:
 					for _, z := range fields {
 						space, local := c_getSpaceAndName(target, target.Space, z)
 						if !elseif {
-							// file.WriteString("    const xmlChar* name = xmlTextReaderConstName (reader);\n")
-							// file.WriteString("    const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
+							// file.WriteString("    const char* name = xmlreader_get_name (reader);\n")
+							// file.WriteString("    const char* namespace = xmlreader_get_namespace (reader);\n")
 						}				
 						if elseif {
 							file.WriteString("  else if")
@@ -1275,19 +1341,17 @@ Loop:
 							elseif = true
 							file.WriteString(" if")
 						}
-						file.WriteString(" ((strcmp ((char *) namespace, " + space +
-							") == 0) && (strcmp ((char*) name, \"" + local + "\") == 0)) {\n")
+						file.WriteString(" ((strcmp (namespace, " + space +
+							") == 0) && (strcmp (name, \"" + local + "\") == 0)) {\n")
 						decoder, err := c_getExtensionDecoder(space, local)
-						if err != nil { return err }
+						if err != nil { return false, err }
 						file.WriteString(c_referenceType(target, z) + " newel = " + decoder +
 							"(reader);\n")
 						file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
-						file.WriteString("//tut\n")
 						fname := z.Name
 						if fname == "" {
 							fname = z.Type.(string)
 						}
-						file.WriteString("//Choice\n")
 						file.WriteString(prefix + "->type = EXTENSION_TYPE_" + c_uppercase(target.Name + "_" +
 							c_normalize(z.Type.(string))) + ";\n")
 						file.WriteString(prefix + sep + "u->" + c_makeIdent(z.Type.(string)) + " = newel;\n")
@@ -1299,7 +1363,7 @@ Loop:
 		}
 		if any != nil {
 			// if !elseif {
-				// file.WriteString("    const xmlChar* namespace = xmlTextReaderConstNamespaceUri (reader);\n")
+				// file.WriteString("    const char* namespace = xmlreader_get_namespace (reader);\n")
 		// }				
 			if elseif {
 				file.WriteString("  else if")
@@ -1307,26 +1371,30 @@ Loop:
 				elseif = true
 				file.WriteString("  if ")
 			}
-			file.WriteString(" (strcmp ((char*) namespace, ns_" + target.Name + ") != 0) {\n")
+			file.WriteString(" (strcmp (namespace, ns_" + target.Name + ") != 0) {\n")
 			switch any.EncodingRule.Type {
 			case "element:name":
+				///+ enum
 				typ := any.Type.(string)
 				field := &Field{Type:typ}
-				file.WriteString("//herace3\n")
-				// file.WriteString("    const xmlChar* name = xmlTextReaderConstName (reader);\n")
+				// file.WriteString("    const char* name = xmlreader_get_name (reader);\n")
 				file.WriteString(prefix + sep + c_makeIdent(any.Name) +
-					" = " + c_makeConverterFromValue(target, field) + "(name);\n")
-				file.WriteString("  if (xstream_skip(reader) != 0) {\n")
-				file.WriteString("    return NULL;\n")
-				file.WriteString("  }\n")
+					" = " + c_makeConverterFromValue(target, field, "name") + ";\n")
+				file.WriteString("  if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 			case "name":
 				file.WriteString(prefix + sep + c_makeIdent(any.Name) + " = name;\n")
 			case "element":
 				subfields := []*Field(any.Type.(Set))
-				c_generate_element_set_decoder(file, target, prefix + sep + c_makeIdent(any.Name), subfields)
+				close, err := c_generate_element_set_decoder(file, target,
+					prefix + sep + c_makeIdent(any.Name), subfields)
+				if err != nil { return false, err }
+				if close {
+					file.WriteString("if (xmlreader_skip_element (reader) != -1) return NULL;\n")
+				}
 			}
 			file.WriteString("      } // any end\n")
 		}
+		file.WriteString ("} // case end\n")
 		file.WriteString("  } // while end\n")
 	}
 	var cdata *Field
@@ -1339,7 +1407,10 @@ Loop:
 	if cdata != nil {
 		c_generate_cdata_decoder(file, target, prefix + sep + c_makeIdent(cdata.Name), cdata)
 	}
-	return nil
+	if len(elems) == 0 && cdata == nil && any == nil {
+		return true, nil
+	}
+	return false, nil
 }
 
 func c_generate_simplevalue_decoder(file *os.File, target *Target, prefix, varname string, field *Field) {
@@ -1358,8 +1429,7 @@ func c_generate_simplevalue_decoder(file *os.File, target *Target, prefix, varna
 	case "bytestring":
 		file.WriteString(prefix + " = " + varname + ");\n")
 	case "jid":
-		file.WriteString("  jid_t *jid = NULL;\n")
-		file.WriteString("  jid = jid_of_string ((const char*) " + varname + ");\n")
+		file.WriteString("jid_t* jid = jid_of_string (" + varname + ");\n")
 		file.WriteString("  " + prefix + " = jid;\n")
 	case "uint":
 		file.WriteString("  " + prefix + " = strconv_parse_uint (" + varname + ");\n")
@@ -1370,9 +1440,7 @@ func c_generate_simplevalue_decoder(file *os.File, target *Target, prefix, varna
 	case "xmllang":
 		file.WriteString(prefix + " = " + varname + ";\n")
 	default: // enums?
-		file.WriteString("//enum\n")
-		file.WriteString(prefix + " = " + c_makeConverterFromValue(target, field) +
-			"(" + varname + ")" + ";\n")
+		file.WriteString(prefix + " = " + c_makeConverterFromValue(target, field, varname) + ";\n")
 	}
 }
 
@@ -1380,7 +1448,17 @@ func c_generate_enum_decoder(file *os.File, target *Target, field *Field) {
 	t := c_makeType(target.Name, field.Name)
 	v := t[:len(t)-2]
 	file.WriteString("enum " + c_makeType(target.Name, field.Name) + " enum_" + v +
-		"_from_string(const xmlChar *value) {\n")
+		"_from_string(const char* value) {\n")
+	elseif := false
+	enum := []string(field.Type.(Enum))
+	for _, z := range enum {
+		if elseif {
+			file.WriteString("else ")
+		}
+		file.WriteString("if (strcmp (value, \"" + z + "\") == 0)\n")
+		file.WriteString("return " + c_uppercase (target.Name + "_" + field.Name + "_" + z) + ";\n")
+		elseif = true
+	}
 	file.WriteString("return 0;\n")
 	file.WriteString("}\n")
 }
@@ -1388,7 +1466,14 @@ func c_generate_enum_decoder(file *os.File, target *Target, field *Field) {
 func c_generate_enum_encoder(file *os.File, target *Target, field *Field) {
 	t := c_makeType(target.Name, field.Name)
 	v := t[:len(t)-2]
-	file.WriteString("xmlChar *enum_" + v + "_to_string(enum " + t + " value) {\n")
+	file.WriteString("const char* enum_" + v + "_to_string(enum " + t + " value) {\n")
+	file.WriteString("switch (value) {\n")
+	enum := []string(field.Type.(Enum))
+	for _, z := range enum {
+		file.WriteString("case " + c_uppercase (target.Name + "_" + field.Name + "_" + z) + ":\n")
+		file.WriteString("return \"" + z + "\";\n")
+	}
+	file.WriteString("}\n")
 	file.WriteString("return NULL;\n")
 	file.WriteString("}\n")
 }
@@ -1400,38 +1485,43 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 		switch typ := element.Type.(type) {
 		case Extension:
 			if typ.Local == "" {
-				file.WriteString("if (xstream_extension_encode (writer, " + prefix +
-					"->data, " + prefix + "->type) == -1)\n return -1;\n")
+				file.WriteString("err = xstream_extension_encode (writer, " + prefix +
+					"->data, " + prefix + "->type);\n")
+				file.WriteString("if (err != 0) return err;\n")
 			} else {
-				field, err := c_getExternalType(typ.Space, typ.Local)
+				encoder, err := c_getExtensionEncoder(typ.Space, typ.Local)
 				if err != nil {return err}
-				file.WriteString("if (" + target.Name + "_" + c_normalize(field) + "_encode(writer, " +
-					prefix + ") == -1)\n return -1;\n")
+				file.WriteString("err = " + encoder + "(writer, " + prefix + ");\n")
+				file.WriteString("if (err != 0) return err;\n")
 			}
 		case string:
-			file.WriteString("if (" + target.Name + "_" + c_normalize(string(typ)) + "_encode(writer, " +
-				prefix + ") == -1)\n return -1;\n")
+			file.WriteString("err = " + target.Name + "_" + c_normalize(string(typ)) +
+				"_encode(writer, " + prefix + ");\n")
+			file.WriteString("if (err != 0) return err;\n")
 		case SequenceOf:
-			file.WriteString("llist_t* curr = (llist_t*)" + prefix + ";\n")
+			file.WriteString("{\n")
+			file.WriteString("vlist_t* curr = (vlist_t*)" + prefix + ";\n")
 			file.WriteString("while (curr != NULL) {\n")
 			if string(typ) == "extension" {
-				file.WriteString("if (xstream_extension_encode(writer, curr->data, curr->type) == -1)\n")
-				file.WriteString("return -1;\n")
+				file.WriteString("err = xstream_extension_encode(writer, curr->data, curr->type);\n")
+				file.WriteString("if (err != 0) return err;\n")
 			} else {
-				file.WriteString("if (" + target.Name + "_" + c_normalize(string(typ)) +
-					"_encode (writer, (extension_t*) curr->data) == -1)\n")
-				file.WriteString("return -1;\n")
+				encoder, err := c_getExtensionEncoder(target.Space, string(typ))
+				if err != nil { return err }
+				file.WriteString("err = " + encoder + " (writer, curr->data);\n")
+				file.WriteString("if (err != 0) return err;\n")
 			}
 			file.WriteString("curr = curr->next;\n")
 			file.WriteString("}\n")
+			file.WriteString("}\n")
 		case Sequence:
-			file.WriteString("llist_t* curr = " + prefix + ";\n")
-			
+			file.WriteString("{\n")
+			file.WriteString("vlist_t* curr = " + prefix + ";\n")
 			file.WriteString("while (curr != NULL) {\n")
-			//todo: cast
-			// file.WriteString("if (" + target.Name + "_" + c_normalize(fname) +
-			//	"_encode(writer, curr->data) == -1)\n return -1;\n")
+			file.WriteString("err = xstream_extension_encode (writer, curr->data, curr->type);\n")
+			file.WriteString("if (err != 0) return -1;\n")
 			file.WriteString("curr = curr->next;\n")
+			file.WriteString("}\n")
 			file.WriteString("}\n")
 		case Set:
 			fields := []*Field(typ)
@@ -1455,11 +1545,10 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 	space, local := c_getSpaceAndName(target, target.Space, element)
 	switch element.EncodingRule.Type {
 	case "element:name":
-		file.WriteString("//here element:name\n")
-		file.WriteString("const xmlChar* name = " + c_makeConverterToValue(target, element) +
-			"(" + prefix + ");\n")
-		file.WriteString("if (xmlTextWriterWriteElementNS(writer, NULL, name, BAD_CAST " +
-			space + ", NULL) == -1)\n return -1;\n")
+		file.WriteString("const char* name = " + c_makeConverterToValue(target, element, prefix) +
+			";\n")
+		file.WriteString("err = xmlwriter_simple_element (writer, " + space + ", name, NULL);\n")
+		file.WriteString("if (err != 0) return err;\n")			
 	case "element:cdata":
 		varname := prefix
 		isarray := false
@@ -1467,28 +1556,41 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 			varname = "curr->data"
 			isarray = true
 		}
-		value := c_generate_simplevalue_encoder(varname, element)
+		// value := c_generate_simplevalue_encoder(varname, element)
+		value := c_makeConverterToValue(target, element, varname)
 		if isarray {
-			file.WriteString("llist_t* curr = " + prefix + ";\n")
+			file.WriteString("vlist_t* curr = " + prefix + ";\n")
 			file.WriteString("while (curr != NULL) {\n")
 		} 
-		file.WriteString("if (xmlTextWriterWriteElementNS (writer, NULL, BAD_CAST \"" +
-			local + "\", BAD_CAST " + space + ", " + value + ") == -1)\n return -1;\n")
+		file.WriteString("err = xmlwriter_simple_element (writer, " + space + ", \"" + local + "\", " +
+			value + ");\n")
+		file.WriteString("if (err != 0) return err;\n")
 		if isarray {
 			file.WriteString("curr = curr->next;\n")
 			file.WriteString("}\n")
 		}
 	case "element:bool":
-		file.WriteString("if (xmlTextWriterWriteElementNS(writer, NULL, BAD_CAST \"" +
-			local + "\", BAD_CAST " + space + ", NULL) == -1)\n return -1;\n")
+		file.WriteString("err = xmlwriter_simple_element (writer, " + space + ", \"" + local +
+			"\", NULL);\n")
+		file.WriteString("if (err != 0) return err;\n")
 	case "startelement", "element":
 		switch typ := element.Type.(type) {
 		case Extension:
 			space, local := c_getSpaceAndName(target, target.Space, element)
-			file.WriteString("if (xmlTextWriterStartElementNS(writer, NULL, BAD_CAST \"" +
-				local + "\", BAD_CAST " + space + ") == -1)\n return -1;\n")
-			file.WriteString("if err = " + prefix + ".Encode(e); err != nil { return err }\n")
-			file.WriteString("if (xmlTextWriterEndElement(writer) == -1)\n  return -1;\n")
+			file.WriteString("err = xmlwriter_start_element (writer, " + space + ", \"" + local +
+				"\");\n")
+			file.WriteString("if (err != 0) return err;\n")
+			if typ.Local != "" {
+				file.WriteString("//here\n");
+				encoder, err := c_getExtensionEncoder(typ.Space, typ.Local)
+				if err != nil { return err }
+				file.WriteString("err = " + encoder + "(writer, " + prefix + ");\n")
+				file.WriteString("if (err != 0) return err;\n")
+			} else {
+				file.WriteString("todo();\n")
+			}
+			file.WriteString("err = xmlwriter_end_element(writer);\n")
+		file.WriteString("if (err != 0) return err;\n")
 		case Set:
 			sep := "->"
 			if prefix != "elm" {
@@ -1498,32 +1600,26 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 			specialFieldName := c_getElementName(fields)
 			if specialFieldName != nil {
 				fieldname = c_makeIdent(specialFieldName.Name)
-				file.WriteString("const xmlChar* name = " +
-					c_makeConverterToValue(target, specialFieldName) + "(" + prefix + sep + fieldname +
-					");\n")
-				file.WriteString("if (xmlTextWriterStartElementNS(writer, NULL, name, BAD_CAST " +
-					space + ") == -1)\n return -1;\n")
+				file.WriteString("const char* name = " +
+					c_makeConverterToValue(target, specialFieldName, prefix + sep + fieldname) + ";\n")
+				file.WriteString("err = xmlwriter_start_element (writer, " + space + ", name);\n")
+		file.WriteString("if (err != 0) return err;\n")
 			} else {
-				file.WriteString("if (xmlTextWriterStartElementNS(writer, NULL, BAD_CAST \"" +
-					local + "\", BAD_CAST " + space + ") == -1)\n return -1;\n")
+				file.WriteString("err = xmlwriter_start_element (writer, " + space + ", \"" +
+					local + "\");\n")
+				file.WriteString("if (err != 0) return err;\n")
 			}
 			for _, x := range fields {
 				if x.EncodingRule != nil && x.EncodingRule.Type == "attribute" {
 					aspace, alocal := c_getSpaceAndName(target, "", x)
+					if aspace == "ns_" + target.Name {
+						aspace = "NULL"
+					}
 					close := c_generate_check_condition(file, prefix + sep + c_makeIdent(x.Name), target, x)
-					aprefix := "\"\""
-					value := c_generate_simplevalue_encoder(prefix + sep + c_makeIdent(x.Name), x)
-					if aspace == ns_xml {
-						aprefix = "\"xml\""
-					}
-					if aspace == "" {
-						file.WriteString("if (xmlTextWriterWriteAttribute(writer, BAD_CAST \"" + alocal +
-							"\", " + value + ") == -1)\n return -1;\n")
-					} else {
-						file.WriteString("if (xmlTextWriterWriteAttributeNS(writer, BAD_CAST " + aprefix +
-							", BAD_CAST \"" + alocal + "\", BAD_CAST \"" +
-							aspace + "\", " + value + ") == -1)\n return -1;\n")
-					}
+					value := c_makeConverterToValue(target, x, prefix + sep + c_makeIdent(x.Name))
+					file.WriteString("err = xmlwriter_attribute (writer, " + aspace + ", \"" + alocal +
+						"\", " + value + ");\n")
+					file.WriteString("if (err != 0) return err;\n")
 					if close {
 						file.WriteString("}\n")
 					}
@@ -1535,22 +1631,22 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 					x.EncodingRule.Type == "cdata" || x.EncodingRule.Type == "attribute") {
 					continue
 				}
-				file.WriteString("//here condition\n")
 				name := prefix
 				if _, ok := x.Type.(Choice); ok {
 					name += "->u"
 					close := c_generate_check_condition(file, name, target, x)
-					file.WriteString("if (xstream_extension_encode(writer, (void*)" + name + ", " + prefix +
-						"->type) == -1)\n return -1;\n")
+					file.WriteString("err = xstream_extension_encode(writer, (void*)" + name + ", " + prefix +
+						"->type);\n")
+					file.WriteString("if (err != 0) return err;\n")
 					if close {
 						file.WriteString("}\n")
-					} else {
-						name += sep + c_makeIdent(x.Name)
-						close := c_generate_check_condition(file, name, target, x)
-						c_generate_element_encoder(file, target, name, x)
-						if close {
-						}
-						file.WriteString("}\n")
+					}
+				} else {
+					name += sep + c_makeIdent(x.Name)
+					close := c_generate_check_condition(file, name, target, x)
+					c_generate_element_encoder(file, target, name, x)
+					if close {
+					file.WriteString("}\n")
 					}
 				}
 			}
@@ -1559,70 +1655,83 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 					file.WriteString("if (" + prefix + sep + c_makeIdent(x.Name) + " != NULL) {\n")
 					typ := x.Type.(string)
 					if typ == "bytestring" {
-						file.WriteString("if (xmlTextWriterWriteBase64(writer, (char*)" + prefix + sep +
-							c_makeIdent(x.Name) + ", 0, strlen((char*)"+ prefix + sep +
-							c_makeIdent(x.Name) + ")) == -1)\n return -1;\n")
+						file.WriteString("err = xmlwriter_base64 (writer, " +
+							prefix + sep + c_makeIdent(x.Name) + ", " +
+							prefix + sep + c_makeIdent(x.Name) + "_len);\n")
+						file.WriteString("if (err != 0) return err;\n")
 					} else {
 						value := c_generate_simplevalue_encoder(prefix + sep + c_makeIdent(x.Name), x)
-						file.WriteString("if (xmlTextWriterWriteCDATA(writer, " + value + ") == -1)\n return -1;\n")
+						file.WriteString("err = xmlwriter_text (writer, " + value + ");\n")
+						file.WriteString("if (err != 0) return err;\n")
 					}
 					file.WriteString("}\n")
 				}
 			}
-				if element.EncodingRule.Type == "element" {
-					file.WriteString("if (xmlTextWriterEndElement(writer) == -1)\n  return -1;\n")
-				}
+			if element.EncodingRule.Type == "element" {
+				file.WriteString("err = xmlwriter_end_element(writer);\n")
+				file.WriteString("if (err != 0) return err;\n")
+			}
 		case string:
 			switch typ {
 			case "langstring":
-				file.WriteString("if (langstring_encode(writer, " + space + ", \"" + local + "\", " +
-					prefix + ") == -1)\n return -1;\n")
+				file.WriteString("err = langstring_encode(writer, " + space + ", \"" + local + "\", " +
+					prefix + ");\n")
+				file.WriteString("if (err != 0) return err;\n")
 			case "extension":
 				file.WriteString(prefix + ".(xmlencoder.Extension).Encode(e)\n")
 			default:
 				file.WriteString(prefix + ".Encode(e)\n")
 			}
 		case Choice:
-			file.WriteString("if (xmlTextWriterStartElementNS(writer, NULL, BAD_CAST \"" + 
-				local + "\", BAD_CAST " + space + ") == -1)\n return -1;\n")
+			file.WriteString("err = xmlwriter_start_element (writer, " + space + ", \"" +
+				local + "\");\n")
+			file.WriteString("if (err != 0) return err;\n")
 			if prefix == "elm" {
 				file.WriteString("if err = elm.Payload.(xmlencoder.Extension).Encode(e); err != nil { return err }\n")
 			} else {
 				file.WriteString("if err = " + prefix + ".(xmlencoder.Extension).Encode(e); err != nil { return err }\n")
 			}
-			file.WriteString("if (xmlTextWriterEndElement(writer) == -1)\n  return -1;\n")
+			file.WriteString("err = xmlwriter_end_element(writer);\n")
+			file.WriteString("if (err != 0) return err;\n")
 		case SequenceOf:
-			file.WriteString("if (xmlTextWriterStartElementNS(writer, NULL, BAD_CAST \"" +
-				local + "\", BAD_CAST " + space + ") == -1)\n return -1;\n")
+			file.WriteString("err = xmlwriter_start_element (writer, " + space + ", \"" + local +
+				"\");\n")
+			file.WriteString("if (err != 0) return err;\n")
 			if prefix == "elm" {
-				// file.WriteString("llist_t* curr = " + prefix + "->extensions;\n")
-				file.WriteString("llist_t* curr = (llist_t*)" + prefix + ";\n")
+				// file.WriteString("vlist_t* curr = " + prefix + "->extensions;\n")
+				file.WriteString("vlist_t* curr = (vlist_t*)" + prefix + ";\n")
 			} else {
-				file.WriteString("llist_t* curr = " + prefix + ";\n")
+				file.WriteString("vlist_t* curr = " + prefix + ";\n")
 			}
 			file.WriteString("while (curr != NULL) {\n")
 			if typ == "extension" {
-				file.WriteString("if (xstream_extension_encode (writer, curr->data, curr->type) == -1)\n return -1;\n")
+				file.WriteString("err = xstream_extension_encode (writer, curr->data, curr->type);\n")
+				file.WriteString("if (err != 0) return err;\n")
 			} else {
 				//+++
 				field := c_getFieldByName(target, string(typ))
 				if field == nil { return errors.New("unknown type " + string(typ)) }
 				space, local := c_getSpaceAndName(target, target.Space, field)
+				file.WriteString("//tut\n")
 				encoder, err := c_getExtensionEncoder(space, local)
 				if err != nil { return err }
-				file.WriteString("if (" + encoder + "(writer, curr->data) == -1)\n return -1;\n")
+				file.WriteString("err = " + encoder + "(writer, curr->data);\n")
+				file.WriteString("if (err != 0) return err;\n")
 			}
 			file.WriteString("curr = curr->next;\n")
 			file.WriteString("}\n")
-			file.WriteString("if (xmlTextWriterEndElement(writer) == -1)\n  return -1;\n")
+			file.WriteString("err = xmlwriter_end_element(writer);\n")
+			file.WriteString("if (err != 0) return err;\n")
 		case Sequence:
-			file.WriteString("if (xmlTextWriterStartElementNS(writer, NULL, BAD_CAST \"" +
-				local + "\", BAD_CAST " + space + ") == -1)\n return -1;\n")
+			file.WriteString("err = xmlwriter_start_element (writer, " + space + ", \"" + local +
+				"\");\n")
+			file.WriteString("if (err != 0) return err;\n")
 			file.WriteString("int i = 0;\n")
 			file.WriteString("for (i; i < " + prefix + "->length; i++) {\n")
 			file.WriteString("if err = x.(xmlencoder.Extension).Encode(e); err != nil { return err }\n")
 			file.WriteString("}\n")
-			file.WriteString("if (xmlTextWriterEndElement(writer) == -1)\n  return -1;\n")
+			file.WriteString("err = xmlwriter_end_element(writer);\n")
+			file.WriteString("if (err != 0) return err;\n")
 		}
 	}
 	return nil
@@ -1709,6 +1818,8 @@ func c_generate_simplevalue_encoder(name string, field *Field) string {
 	isarray := false
 	var typ string
 	switch t := field.Type.(type) {
+	case Enum:
+		
 	case SequenceOf:
 		isarray = true
 		typ = string(t)
@@ -1719,20 +1830,20 @@ func c_generate_simplevalue_encoder(name string, field *Field) string {
 	case "string":
 		if isarray {
 			if name == "elm" {
-				return "BAD_CAST " + name
+				return name
 			} else {
 				return name
 			}
 		}
 		if name == "elm" {
-			return "BAD CAST*" + name
+			return name
 		} else {
 			return name
 		}
 	case "boolean":
 		return "strconv_format_boolean(" + name + ")"
 	case "jid":
-		return "BAD_CAST jid_to_string(" + name + ")"
+		return "jid_to_string(" + name + ")"
 	case "uint":
 		return "strconv_format_uint(" + name + ")"
 	case "int":
@@ -1740,7 +1851,7 @@ func c_generate_simplevalue_encoder(name string, field *Field) string {
 	case "datetime":
 		return "datetime_to_string(" + name + ")"
 	}
-	return "BAD_CAST "  + name
+	return name
 }
 
 func c_generate_check_condition(file *os.File, name string, target *Target, field *Field) bool {
@@ -1798,14 +1909,14 @@ func c_generate_extensions(filename string) {
 	for _, schema := range schemas {
 		for _, target := range schema.Targets {
 			for _, field := range target.Fields {
-				if (field.EncodingRule != nil && field.EncodingRule.Type == "element") ||
-					len(target.Fields) == 1 {
+				if (field.EncodingRule != nil && (field.EncodingRule.Type == "element" ||
+					field.EncodingRule.Type == "startelement")) || len(target.Fields) == 1 {
 					_, local := c_getSpaceAndName(target, target.Space, field)
 					name := target.Name + "_" + c_normalize(field.Name)
 					file.WriteString(" {\"" + target.Space +
 						"\", \"" + local + "\", EXTENSION_TYPE_" + c_uppercase(name) +
-						", (void *(*)(xmlTextReaderPtr)) " +
-						name + "_decode, (int (*)(xmlTextWriterPtr, void*)) " +
+						", (void *(*)(xmlreader_t*)) " +
+						name + "_decode, (int (*)(xmlwriter_t*, void*)) " +
 						name + "_encode},\n")
 					extensions_len++
 				}
@@ -1829,6 +1940,7 @@ func c_generate_extensions_types(filename string) {
 		for _, target := range schema.Targets {
 			for _, field := range target.Fields {
 				if (field.EncodingRule != nil && (field.EncodingRule.Type == "element" ||
+					field.EncodingRule.Type == "startelement" ||
 					field.EncodingRule.Type == "element:cdata")) || len(target.Fields) == 1 {
 					name := target.Name + "_" + c_normalize(field.Name)
 					file.WriteString("  EXTENSION_TYPE_" + c_uppercase(name) + ",\n")
