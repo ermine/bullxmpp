@@ -256,38 +256,24 @@ func c_generate_structs(file *os.File, target *Target) error {
 			target.Fields = append(target.Fields, x)
 		}
 	}
-	// target.Fields = append(target.Fields, enums...)
 	c_generate_enums(file, target, enums)
 	file.WriteString("\n")
 	for _, def := range target.Fields {
 		if _, ok := def.Type.(Enum); ok {
 			continue
 		}
-		// file.WriteString("struct " + c_makeType(def.Name) + "{\n")
 		switch t := def.Type.(type) {
 		case Extension:
 			if t.Local != "" {
 				field, err := c_getExternalType(t.Space, t.Local)
 				if err != nil { return err }
-				/// if field[len(field)-1] == '*' {
-				///	field = field[:len(field)-1]
-				/// }
 				file.WriteString("typedef " + field + " " + c_makeType(target.Name, def.Name) + ";\n")
 			} else {
 				file.WriteString("typedef extension_t* " + c_makeType(target.Name, def.Name) + ";\n")
 			}
 		case SequenceOf:
-			if t == "extension" {
-				// file.WriteString("struct " + c_makeType(target.Name, def.Name) + "{\n")
-				// file.WriteString("  vlist_t *extensions;\n")
-				// file.WriteString("};\n")
-				file.WriteString("typedef vlist_t " + c_makeType(target.Name, def.Name) + ";\n")
-			} else {
-				// field := c_getFieldByName(target, string(t))
-				// file.WriteString(c_referenceType(target, field) + " *" + c_makeIdent(def.Name) + ";\n")
-				// file.WriteString("vlist_t *" + c_makeIdent(def.Name) + ";\n")
-				file.WriteString("typedef vlist_t " + c_makeType(target.Name, def.Name) + ";\n")
-			}
+			// file.WriteString("array_t* " + c_makeIdent(def.Name) + ";\n")
+			// file.WriteString("typedef array_t " + c_makeType(target.Name, def.Name) + ";\n")
 		case string:
 			var typ string
 			typ = c_simpletype(t);
@@ -317,7 +303,7 @@ func c_generate_structs(file *os.File, target *Target) error {
 					c_makeIdent(x.Name) + ";\n")
 			}
 			file.WriteString("    } u;\n")
-			file.WriteString("  } sequence_t *sequence;\n")
+			file.WriteString("  } sequence_t* sequence;\n")
 			file.WriteString("};")
 		case Choice:
 			def.Type = Set([]*Field{&Field{Name:"u", Type:t}})
@@ -391,27 +377,8 @@ func c_generate_fields(file *os.File, target *Target, fields []*Field) error {
 					file.WriteString("  " + typ + " " + c_makeIdent(x.Name) + ";\n")
 				}
 			}
-		case SequenceOf:
-			switch t {
-			case "extension":
-				file.WriteString("  vlist_t *" + c_makeIdent(x.Name) + ";\n")
-			default:
-				/*
-				field := c_getFieldByName(target, string(t))
-				if field == nil {
-					file.WriteString("  " + c_simpletype(string(t)) + " " + c_makeIdent(x.Name) + ";\n");
-				} else {
-					if c_isStruct(field) {
-						file.WriteString("  " + c_referenceType(target, field) + " " + c_makeIdent(x.Name) +
-							";\n")
-					} else {
-						file.WriteString("  " + c_referenceType(target, field) + " " + c_makeIdent(x.Name) +
-							";\n")
-					}
-				}
-*/
-				file.WriteString("  vlist_t *" + c_makeIdent(x.Name) + ";\n")
-			}
+		case SequenceOf, Sequence:
+			file.WriteString("  array_t* " + c_makeIdent(x.Name) + ";\n")
 		case Extension:
 			if t.Local != "" {
 				fieldtype, err := c_getExternalType(t.Space, t.Local)
@@ -420,10 +387,8 @@ func c_generate_fields(file *os.File, target *Target, fields []*Field) error {
 			} else {
 				file.WriteString("  extension_t* " + c_makeIdent(x.Name) + ";\n")
 			}
-		case Sequence:
-			file.WriteString(" vlist_t *" + c_makeIdent(x.Name) + ";\n")
 		case Choice:
-			file.WriteString(" extension_t *" + c_makeIdent(x.Name) + ";\n")
+			file.WriteString(" extension_t* " + c_makeIdent(x.Name) + ";\n")
 		case Set:
 			fields := []*Field(t)
 			file.WriteString(" struct " + c_makeType(target.Name, x.Name + "_set") + " {\n")
@@ -524,7 +489,7 @@ func c_makeConverterFromValue(target *Target, field *Field, varname string) stri
 	}
 	// return "(" + c_simpletype(name) + ")"
 	// return "(" + c_referenceType(target, field) + ")"
-	return "(const char*) " + varname
+	return "(char*)" +varname
 }
 
 func c_makeConverterToValue(target *Target, field *Field, varname string) string {
@@ -556,13 +521,13 @@ func c_makeConverterToValue(target *Target, field *Field, varname string) string
 
 func c_simpletype(s string) string {
 	switch s {
-	case "jid": return "jid_t *"
+	case "jid": return "jid_t* "
 	case "int": return "int *"
 	case "uint": return "uint32_t *"
-	case "string": return "const char*"
+	case "string": return "char*"
 	case "boolean": return "int *"
 	case "langstring": return "langstring_t *"
-	case "xmllang": return "const char*"
+	case "xmllang": return "char*"
 	case "bytestring":
 		return "unsigned char* ";
 	case "extension": return "void *"
@@ -633,6 +598,23 @@ func c_getExtensionEncoder(space, local string) (string, error) {
 	return "", errors.New("extenal type for " + space + " " + local + " not found")
 }	
 
+func c_getExtensionFree(space, local string) (string, error) {
+	for _, schema := range schemas {
+		for _, target := range schema.Targets {
+			if target.Space == space || "ns_" + target.Name == space {
+				for _, field := range target.Fields {
+					_, alocal := c_getSpaceAndName(target, target.Space, field)
+					if  alocal == local {
+						return target.Name + "_" + c_normalize(field.Name) + "_free", nil
+					}
+				}
+			}
+		}
+	}
+	return "", errors.New("extenal type for " + space + " " + local + " not found")
+}	
+
+
 func c_getExternalType(space, local string) (string, error) {
 	for _, schema := range schemas {
 		for _, target := range schema.Targets {
@@ -683,17 +665,26 @@ func c_generate_signatures(file *os.File, target *Target) {
 	for _, field := range target.Fields {
 		switch field.Type.(type) {
 		case Enum:
-		case Set, Sequence, SequenceOf, Choice:
+		case SequenceOf:
+			name := target.Name + "_" + c_normalize(field.Name)
+			file.WriteString("array_t* " + name + "_decode(xmlreader_t* reader);\n")
+			file.WriteString("int " + name + "_encode(xmlwriter_t* writer, array_t* data);\n")
+			file.WriteString("void " + name + "_free (array_t* data);\n")
+		case Set, Sequence, Choice:
 			name := target.Name + "_" + c_normalize(field.Name)
 			file.WriteString("struct " + c_makeType(target.Name, field.Name) + "* " +
 				name + "_decode(xmlreader_t* reader);\n")
 			file.WriteString("int " + name + "_encode(xmlwriter_t* writer, struct " +
 				c_makeType(target.Name, field.Name) + "* data);\n")
+			file.WriteString("void " + name + "_free (struct " +
+								c_makeType(target.Name, field.Name) + "* data);\n")
 		default:
 			name := target.Name + "_" + c_normalize(field.Name)
 			file.WriteString(c_makeType(target.Name, field.Name) + "* " +
 				name + "_decode(xmlreader_t* reader);\n")
 			file.WriteString("int " + name + "_encode(xmlwriter_t* writer, " +
+				c_makeType(target.Name, field.Name) + "* data);\n")
+			file.WriteString("void " + name + "_free (" +
 				c_makeType(target.Name, field.Name) + "* data);\n")
 		}
 	}
@@ -718,7 +709,8 @@ func c_generate_c(schema *Schema) error {
 func c_generate_file_c(file *os.File, filename string, schema *Schema) error {
 	var err error
 	file.WriteString("#include \"" + filename + ".h\"\n")
-	file.WriteString("#include \"helpers.h\"\n\n")
+	file.WriteString("#include \"helpers.h\"\n")
+	file.WriteString("#include \"errors.h\"\n\n")
 	for _, target := range schema.Targets {
 		file.WriteString("const char* ns_" + target.Name + " = \"" + target.Space + "\";\n")
 	}
@@ -729,7 +721,51 @@ func c_generate_file_c(file *os.File, filename string, schema *Schema) error {
 			case Enum:
 				c_generate_enum_decoder(file, target, field)
 				c_generate_enum_encoder(file, target, field)
-			case Set, Sequence, SequenceOf, Choice:
+
+			case SequenceOf:
+				name := target.Name + "_" + c_normalize(field.Name)
+				file.WriteString("array_t* " + name + "_decode(xmlreader_t* reader) {\n")
+				// todo: type of sizeof
+				file.WriteString(" array_t* elm = array_new (sizeof (extension_t), 0);\n")
+				if err := c_generate_element_decoder(file, target, "elm", field); err != nil { return err }
+				file.WriteString("  return elm;\n")
+				file.WriteString("}\n\n")
+				file.WriteString("int " + name + "_encode(xmlwriter_t* writer, array_t* elm) {\n")
+				file.WriteString("int err = 0;\n")
+				if target.Prefix != "" {
+					file.WriteString("err = xmlwriter_set_prefix (writer, \"" + target.Prefix + "\", ns_" +
+						target.Name + ");\n")
+					file.WriteString("if (err != 0) return err;\n")
+				}
+				if err := c_generate_element_encoder(file, target, "elm", field); err != nil { return err }
+				file.WriteString("  return 0;\n")
+				file.WriteString("}\n\n")
+				file.WriteString("void " + name + "_free (array_t* data) {\n")
+				file.WriteString("if (data == NULL)\n")
+				file.WriteString("return;\n")
+				file.WriteString("int len = array_length (data);\n")
+				file.WriteString("int i = 0;\n")
+				file.WriteString("for (i = 0; i < len; i++) {\n")
+				t := field.Type.(SequenceOf)
+				if (t == "extension") {
+					file.WriteString("extension_t* ext = array_get (data, i);\n")
+					file.WriteString("xstream_extension_free (ext);\n")
+				} else {
+					f := c_getFieldByName(target, string(t))
+					if f == nil {
+						return errors.New("unknown type " + string(t))
+					}
+					typ := c_referenceType(target, f)
+					file.WriteString(typ + "* item = array_get (data, i);\n")
+					freer, err := c_getExtensionFree(target.Space, string(t))
+					if err != nil { return err }
+					file.WriteString(freer + "(item);\n")
+				}
+				file.WriteString("}\n")
+				file.WriteString("array_free (data);\n")
+				file.WriteString("}\n\n")
+				
+			case Set, Sequence, Choice:
 				name := target.Name + "_" + c_normalize(field.Name)
 				file.WriteString("struct " + c_makeType(target.Name, field.Name) + "* " +
 					name + "_decode(xmlreader_t* reader) {\n")
@@ -737,26 +773,13 @@ func c_generate_file_c(file *os.File, filename string, schema *Schema) error {
 				if t[len(t)-1] == '*' {
 					t = t[:len(t)-1]
 				}
-				if _, ok := field.Type.(SequenceOf); ok {
-					file.WriteString(t + "** elm = NULL;\n")
-					file.WriteString(" elm = malloc (sizeof (" + t + "**));\n")
-					file.WriteString("if (elm == NULL)\n")
-					file.WriteString("fatal (\"" + c_makeType (target.Name, field.Name) + ": malloc failed\");\n")
-					file.WriteString("*elm = NULL;\n")
-				} else {
-					file.WriteString("  struct " + c_makeType(target.Name, field.Name) + " *elm = NULL;\n")
-					file.WriteString(" elm = malloc (sizeof (" + t + "));\n")
-					file.WriteString("if (elm == NULL)\n")
-					file.WriteString("fatal (\"" + c_makeType (target.Name, field.Name) + ": malloc failed\");\n")
-					file.WriteString("memset (elm, 0, sizeof (" + t + "));\n")
-				}
-
+				file.WriteString("  struct " + c_makeType(target.Name, field.Name) + " *elm = NULL;\n")
+				file.WriteString(" elm = malloc (sizeof (" + t + "));\n")
+				file.WriteString("if (elm == NULL)\n")
+				file.WriteString("fatal (\"" + c_makeType (target.Name, field.Name) + ": malloc failed\");\n")
+				file.WriteString("memset (elm, 0, sizeof (" + t + "));\n")
 				if err := c_generate_element_decoder(file, target, "elm", field); err != nil { return err }
-				if _, ok := field.Type.(SequenceOf); ok {
-					file.WriteString("  return *elm;\n")
-				} else {
-					file.WriteString("  return elm;\n")
-				}
+				file.WriteString("  return elm;\n")
 				file.WriteString("}\n\n")
 				file.WriteString("int " + name + "_encode(xmlwriter_t* writer, struct " +
 					c_makeType(target.Name, field.Name) + "* elm) {\n")
@@ -768,11 +791,17 @@ func c_generate_file_c(file *os.File, filename string, schema *Schema) error {
 				}
 				if err := c_generate_element_encoder(file, target, "elm", field); err != nil { return err }
 				file.WriteString("  return 0;\n")
-				file.WriteString("}\n\n")				
+				file.WriteString("}\n\n")
+				file.WriteString("void " + name + "_free (struct " + 
+					c_makeType(target.Name, field.Name) + "* data) {\n")
+				file.WriteString("if (data == NULL) return;\n")
+				c_generate_free (file,  target, "data", field)
+				file.WriteString("free (data);\n")
+				file.WriteString("}\n\n")
 			default:
 				name := target.Name + "_" + c_normalize(field.Name)
 				file.WriteString(c_makeType(target.Name, field.Name) + "* " +
-						name + "_decode(xmlreader_t* reader) {\n")
+					name + "_decode(xmlreader_t* reader) {\n")
 				file.WriteString("  " + c_makeType(target.Name, field.Name) + " *elm = NULL;\n")
 				c_generate_element_decoder(file, target, "elm", field)
 				if _, ok := field.Type.(SequenceOf); ok {
@@ -782,7 +811,7 @@ func c_generate_file_c(file *os.File, filename string, schema *Schema) error {
 				}
 				file.WriteString("}\n\n")
 				file.WriteString("int " + name + "_encode(xmlwriter_t* writer, " +
-						c_makeType(target.Name, field.Name) + "* elm) {\n")
+					c_makeType(target.Name, field.Name) + "* elm) {\n")
 				file.WriteString("int err = 0;\n")
 				if target.Prefix != "" {
 					file.WriteString("err = xmlwriter_set_prefix (writer, \"" + target.Prefix + "\", ns_" +
@@ -791,6 +820,12 @@ func c_generate_file_c(file *os.File, filename string, schema *Schema) error {
 				}
 				if err := c_generate_element_encoder(file, target, "elm", field); err != nil { return err }
 				file.WriteString("  return 0;\n")
+				file.WriteString("}\n\n")
+				file.WriteString("void " + name + "_free (" + 
+					c_makeType(target.Name, field.Name) + "* data) {\n")
+				file.WriteString("if (data == NULL) return;\n")
+				c_generate_free (file,  target, "data", field)
+				file.WriteString("free (data);\n")
 				file.WriteString("}\n\n")
 			}
 		}
@@ -825,9 +860,10 @@ func c_generate_element_decoder(file *os.File, target *Target, prefix string, el
 				file.WriteString("const char* namespace = xmlreader_get_namespace (reader);\n")
 				file.WriteString("if ((strcmp (namespace, \"" + typ.Space +
 					"\") == 0) && (strcmp (name, \"" + typ.Local + "\") == 0)) {\n")
-				file.WriteString("extension_t* newel = xstream_extension_decode (reader);\n")
-				file.WriteString("if (reader->err != 0) return NULL;\n")
-				file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
+				decoder, err := c_getExtensionDecoder(typ.Space, typ.Local)
+				if err != nil { return err }
+				file.WriteString(c_referenceType(target, element) + " newel = " + decoder + "(reader);\n")
+				file.WriteString("if (newel == NULL) return NULL;\n")
 				if prefix == "elm" {
 					file.WriteString(prefix + " = " +
 						c_makeConverterToValue(target, element, "newel") + ";\n")
@@ -838,17 +874,18 @@ func c_generate_element_decoder(file *os.File, target *Target, prefix string, el
 				file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 				file.WriteString("}\n")
 			} else {
-				file.WriteString("extensiont_t* newel = xstream_extension_decode (reader);\n")
+				file.WriteString("extension_t* newel = malloc (sizeof (extension_t));\n")
+				file.WriteString("int err = xstream_extension_decode (reader, ext);\n")
 				file.WriteString("if (reader->err != 0) return NULL;\n")
-				file.WriteString("if (newel != NULL) {\n")
+				file.WriteString("if (err == ERR_EXTENSION_NOT_FOUND) {\n")
+				file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
+				file.WriteString("} else {\n")
 				if prefix == "elm" {
 					file.WriteString(prefix + " = " +
 						c_makeConverterToValue(target, element, "(newel") + ";\n")
 				} else {
 					file.WriteString(prefix + " = newel;\n")
 				}
-				file.WriteString("} else {\n")
-				file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 				file.WriteString("}\n")
 			}
 			file.WriteString("}\n")
@@ -862,7 +899,7 @@ func c_generate_element_decoder(file *os.File, target *Target, prefix string, el
 				close, err := c_generate_element_set_decoder(file, target, prefix, fields)
 				if err != nil { return err }
 				if element.EncodingRule.Type != "startelement" && close {
-					file.WriteString("if (xmlreader_skip_element (reader) != -1) return NULL;\n")
+					file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 				}
 			}
 		case Choice:
@@ -877,9 +914,10 @@ func c_generate_element_decoder(file *os.File, target *Target, prefix string, el
 				space, local := c_getSpaceAndName(target, target.Space, z)
 				file.WriteString(" if ((strcmp (namespace, " + space +
 					") == 0) && (strcmp (name,  \"" + local + "\") == 0)) {\n")
-				file.WriteString("  extension_t *newel = xstream_extension_decode(reader);\n")
-				file.WriteString("if (reader->err != 0) return NULL;\n")
-				file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
+				decoder, err := c_getExtensionDecoder(target.Space, local)
+				if err != nil { return err }
+				file.WriteString(c_referenceType(target, z) + " newel = " + decoder + "(reader);\n")
+				file.WriteString("if (newel == NULL) return NULL;\n")
 				file.WriteString(prefix + "->u = (" + c_referenceType(target, element) + "*) newel;\n")
 				file.WriteString("  }\n")
 			}
@@ -898,16 +936,18 @@ func c_generate_element_decoder(file *os.File, target *Target, prefix string, el
 				name := prefix + "->" + element.Name
 				if prefix == "elm" {
 					name = prefix
-				} else {
-					name = "&" + name
 				}
-				file.WriteString("    extension_t *newel = xstream_extension_decode (reader);\n")
+				file.WriteString("extension_t ext;\n")
+				file.WriteString("int err = xstream_extension_decode (reader, &ext);\n")
 				file.WriteString("if (reader->err != 0) return NULL;\n")
-				file.WriteString("    if (newel != NULL) {\n")
-				file.WriteString("      vlist_append((vlist_t**) " + name + ", newel->data, newel->type);\n")
-				file.WriteString("free (newel);\n")
-				file.WriteString("} else {\n")
+				file.WriteString("if (err == ERR_EXTENSION_NOT_FOUND) {\n")
 				file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
+				file.WriteString("} else {\n")
+				if prefix != "elm" {
+					file.WriteString("if (" + name + " == NULL)\n")
+					file.WriteString(name + " = array_new (sizeof (extension_t), 0);\n")
+				}
+				file.WriteString("array_append (" + name + ", &ext);\n")
 				file.WriteString("}\n")
 			} else {
 				f := c_getFieldByName(target, field)
@@ -928,9 +968,11 @@ func c_generate_element_decoder(file *os.File, target *Target, prefix string, el
 				if name != "elm" {
 					name = "&" + name
 				}
-				file.WriteString("  vlist_append ((vlist_t **) " + name +
-					", (void*) newel, EXTENSION_TYPE_" +
-					c_uppercase(target.Name + "_" + c_normalize(f.Name)) + ");\n")
+				if prefix != "elm" {
+					file.WriteString("if (" + name + " == NULL)\n")
+					file.WriteString(name + " = array_new (sizeof (extension_t), 0);\n")
+				}
+				file.WriteString("  array_append (" + name + ", newel);\n")
 				file.WriteString("}\n")
 			}
 			file.WriteString("}\n")
@@ -954,17 +996,13 @@ func c_generate_cdata_decoder(file *os.File, target *Target, prefix string, fiel
 	case "string":
 		file.WriteString("const char* value = xmlreader_text (reader);\n")
 		file.WriteString("if (reader->err != 0) return NULL;\n")
+		name := prefix
 		if isarray {
-			if prefix == "elm" {
-				file.WriteString(prefix + " = append(*" + prefix + ", " +
-					c_referenceType(target, field) + "(value));\n")
-			} else {
-				name := prefix
-				if name != "elm" {
-					name = "&" + name
-				}
-				file.WriteString("  vlist_append ((vlist_t**) " + name + ", (void*) value, 0);\n")
+			if prefix != "elm" {
+				file.WriteString("if (" + name + " == NULL)\n")
+				file.WriteString(name + " = array_new (sizeof (char*), 0);\n")
 			}
+			file.WriteString("  array_append (" + name + ", (void*) &value);\n")
 		} else {
 //			if prefix == "elm" {
 			file.WriteString(prefix + " = " +  c_makeConverterFromValue(target, field, "value") + ";\n")
@@ -977,7 +1015,9 @@ func c_generate_cdata_decoder(file *os.File, target *Target, prefix string, fiel
 		file.WriteString("if (reader->err != 0) return NULL;\n")
 		file.WriteString("  jid_t *jid = jid_of_string((const char*) s);\n")
 		if isarray {
-			file.WriteString("  vlist_append ((vlist_t**) &" + prefix + ", (void*) jid, 0);\n")
+			file.WriteString("if (" + prefix + " == NULL)\n")
+			file.WriteString(prefix + " = array_new (sizeof (jid_t*), 0);\n")
+			file.WriteString("  array_append (" + prefix + ", &jid);\n")
 		} else {
 			file.WriteString(prefix + " = jid;\n")
 		}
@@ -991,7 +1031,9 @@ func c_generate_cdata_decoder(file *os.File, target *Target, prefix string, fiel
 		file.WriteString(" const char* s = xmlreader_text (reader);\n")
 		file.WriteString("if (reader->err != 0) return NULL;\n")
 		if isarray {
-			file.WriteString("  vlist_append (&*" + prefix + "strconv_parse_uint64 (s), 0);\n")
+			file.WriteString("if (" + prefix + " == NULL)\n")
+			file.WriteString(prefix + " = array_new (sizeof (uint32_t), 0);\n")
+			file.WriteString("  array_append (" + prefix + "strconv_parse_uint64 (s), 0);\n")
 		} else {
 			file.WriteString("  " + prefix + " = strconv_parse_uint64 (s);\n")
 		}
@@ -999,7 +1041,9 @@ func c_generate_cdata_decoder(file *os.File, target *Target, prefix string, fiel
 		file.WriteString(" const char* s = xmlreader_text (reader);\n")
 		file.WriteString("if (reader->err != 0) return NULL;\n")
 		if isarray {
-			file.WriteString("  vlist_append (&*" + prefix + ", strconv_parse_int (s), 0);\n")
+			file.WriteString("if (" + prefix + " == NULL)\n")
+			file.WriteString(prefix + " = array_new (sizeof (int), 0);\n")
+			file.WriteString("  array_append (" + prefix + ", strconv_parse_int (s), 0);\n")
 		} else {
 			file.WriteString("  " + prefix + " = strconv_parse_int (s);\n")
 		}
@@ -1008,8 +1052,10 @@ func c_generate_cdata_decoder(file *os.File, target *Target, prefix string, fiel
 		file.WriteString("if (reader->err != 0) return NULL;\n")
 		file.WriteString("if tm, err = time.Parse(time.RFC3339, s); err != nil { return err }")
 		if isarray {
+			file.WriteString("if (" + prefix + " == NULL)\n")
+			file.WriteString(prefix + " = array_new (sizeof (struct tm), 0);\n")
 			file.WriteString("struct tm* datetime = datetime_parse(s);\n")
-			file.WriteString("vlist_append (&" + prefix + ", (void*) datetime, 0);\n")
+			file.WriteString("array_append (" + prefix + ", datetime);\n")
 		} else {
 			file.WriteString(prefix + " = datetime_parse(s);\n")
 		}
@@ -1126,7 +1172,7 @@ Loop:
 							prefix + sep + c_makeIdent(x.Name), fields)
 						if err != nil { return false, err }
 						if close {
-							file.WriteString("if (xmlreader_skip_element (reader) != -1) return NULL;\n")
+							file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 						}
 					case SequenceOf:
 						field := c_getFieldByName(target, string(typ))
@@ -1147,10 +1193,11 @@ Loop:
 						decoder, err := c_getExtensionDecoder(space, local)
 						if err != nil { return false, err }
 						file.WriteString(c_referenceType(target, field) + " newel = " + decoder + "(reader);\n")
-						file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
-						file.WriteString("  vlist_append ((vlist_t**) &" + prefix + sep + c_makeIdent(x.Name) +
-							", (void*) newel, EXTENSION_TYPE_" +
-							c_uppercase(target.Name + "_" + c_normalize(field.Name)) + ");\n")
+						file.WriteString("  if (newel != NULL) {\n    return NULL;\n  }\n")
+						name := prefix + sep + c_makeIdent(x.Name)
+						file.WriteString("if (" + name + " == NULL)\n")
+						file.WriteString(name + " = array_new (sizeof (extension_t), 0);\n")
+						file.WriteString("  array_append (" + name + ", newel);\n")
 						file.WriteString("}\n")
 						file.WriteString("  }\n")
 						file.WriteString("}\n")
@@ -1179,9 +1226,10 @@ Loop:
 							if err != nil { return false, err }
 							file.WriteString(c_referenceType(target, z) + "  newel = " + decoder + "(reader);\n")
 							file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
-							file.WriteString("  vlist_append ((vlist_t**) &" +
-								prefix + sep + c_makeIdent(x.Name) + ", (void*) newel, EXTENSION_TYPE_" +
-								c_uppercase(target.Name + "_" + c_normalize(z.Name)) + ");\n")
+							name := prefix + sep + c_makeIdent(x.Name)
+							file.WriteString("if (" + name + " == NULL)\n")
+							file.WriteString(name + " = array_new (sizeof (extension_t), 0);\n")
+							file.WriteString("  array_append (" + name + ", newel);\n")
 							file.WriteString("  }\n")
 						}
 						file.WriteString("  }\n")
@@ -1213,7 +1261,7 @@ Loop:
 						file.WriteString("}\n")
 					}
 				}
-				file.WriteString("  } // for end part 1\n")
+				file.WriteString("  }\n")
 			} else {
 				switch typ := x.Type.(type) {
 				case Extension:
@@ -1224,14 +1272,15 @@ Loop:
 							elseif = true
 						}
 						file.WriteString("if (strcmp (namespace, ns_" + target.Name + ") != 0) {\n")
-						file.WriteString("  extension_t* newel = xstream_extension_decode (reader);\n")
-				file.WriteString("if (reader->err != 0) return NULL;\n")
-						file.WriteString("  if (newel == NULL) {\n")
+						file.WriteString("extension_t* newel = malloc (sizeof (extension_t));\n")
+						file.WriteString("int err = xstream_extension_decode (reader, newel);\n")
+						file.WriteString("if (reader->err != 0) return NULL;\n")
+						file.WriteString("if (err == ERR_EXTENSION_NOT_FOUND) {\n")
 						file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 						file.WriteString("} else {\n")
 						file.WriteString(prefix + sep + c_makeIdent(x.Name) + " = newel;\n")
 						file.WriteString("}\n")
-						file.WriteString("} // end of if strcmp\n")
+						file.WriteString("}\n")
 					} else {
 						typename, err := c_getExternalType(typ.Space, typ.Local)
 						if err != nil { return false, err }
@@ -1254,7 +1303,7 @@ Loop:
 						file.WriteString(prefix + sep + c_makeIdent(x.Name) + " = newel;\n")
 						file.WriteString("}\n")
 						if was_elseif {
-							file.WriteString("} // end here\n")
+							file.WriteString("}\n")
 						}
 					}
 				case Set:
@@ -1286,14 +1335,17 @@ Loop:
 							elseif = true
 						}
 						file.WriteString("if (strcmp (namespace, ns_" + target.Name + ") != 0) {\n")
-						file.WriteString("  extension_t* newel = xstream_extension_decode (reader);\n")
-				file.WriteString("if (reader->err != 0) return NULL;\n")
-						file.WriteString("  if (newel == NULL) {\n")
+						file.WriteString("extension_t ext;\n")
+						file.WriteString("int err = xstream_extension_decode (reader, &ext);\n")
+						file.WriteString("if (reader->err != 0) return NULL;\n")
+						file.WriteString("if (err == ERR_EXTENSION_NOT_FOUND) {\n")
 						file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
-						file.WriteString("} else {\n")
-						file.WriteString("  vlist_append ((vlist_t**)&" + prefix + sep + c_makeIdent(x.Name) +
-							", newel->data, newel->type);\n")
-						file.WriteString("free(newel);\n")
+						file.WriteString("} else{\n")
+						file.WriteString("if (" + prefix + sep + c_makeIdent(x.Name) + " == NULL)\n")
+						file.WriteString(prefix + sep + c_makeIdent(x.Name) +
+							" = array_new (sizeof (extension_t), 0);\n")
+						file.WriteString("array_append (" + prefix + sep + c_makeIdent(x.Name) +
+							", &ext);\n")
 						file.WriteString("}\n")
 						file.WriteString("}\n")
 						
@@ -1318,10 +1370,11 @@ Loop:
 							file.WriteString(c_referenceType(target, field) +
 								" newel = " + decoder + "(reader);\n")
 							file.WriteString("  if (newel == NULL) {\n    return NULL;\n  }\n")
+							file.WriteString("if (" + prefix + sep + c_makeIdent(x.Name) + " == NULL)\n")
+							file.WriteString(prefix + sep + c_makeIdent(x.Name) + " = array_new (sizeof (extension_t), 0);\n")
 							file.WriteString(
-								"  vlist_append ((vlist_t**)&" + prefix + sep + c_makeIdent(x.Name) +
-									", (void*) newel, EXTENSION_TYPE_" +
-									c_uppercase(target.Name + "_" + c_normalize(field.Name)) + ");\n")
+								"  array_append (" + prefix + sep + c_makeIdent(x.Name) +
+									", newel);\n")
 							file.WriteString("  }\n")
 						} else {
 							fmt.Println("dont know how to decode 111 ", typ)
@@ -1389,13 +1442,13 @@ Loop:
 					prefix + sep + c_makeIdent(any.Name), subfields)
 				if err != nil { return false, err }
 				if close {
-					file.WriteString("if (xmlreader_skip_element (reader) != -1) return NULL;\n")
+					file.WriteString("if (xmlreader_skip_element (reader) == -1) return NULL;\n")
 				}
 			}
-			file.WriteString("      } // any end\n")
+			file.WriteString("      }\n")
 		}
-		file.WriteString ("} // case end\n")
-		file.WriteString("  } // while end\n")
+		file.WriteString ("}\n")
+		file.WriteString("  }\n")
 	}
 	var cdata *Field
 	for _, x := range fields {
@@ -1425,7 +1478,7 @@ func c_generate_simplevalue_decoder(file *os.File, target *Target, prefix, varna
 	case "boolean":
 		file.WriteString(prefix + " = strconv_parse_boolean(" + varname + ");\n")
 	case "string":
-		file.WriteString("  " + prefix + " = " + varname + ";\n")
+		file.WriteString("  " + prefix + " = (char*) " + varname + ";\n")
 	case "bytestring":
 		file.WriteString(prefix + " = " + varname + ");\n")
 	case "jid":
@@ -1438,7 +1491,7 @@ func c_generate_simplevalue_decoder(file *os.File, target *Target, prefix, varna
 	case "datetime":
 		file.WriteString(prefix + " = datetime_parse (" + varname + ");\n")
 	case "xmllang":
-		file.WriteString(prefix + " = " + varname + ";\n")
+		file.WriteString(prefix + " = (char*)" + varname + ";\n")
 	default: // enums?
 		file.WriteString(prefix + " = " + c_makeConverterFromValue(target, field, varname) + ";\n")
 	}
@@ -1479,6 +1532,239 @@ func c_generate_enum_encoder(file *os.File, target *Target, field *Field) {
 }
 
 
+
+
+func c_hasChilds(target *Target, field *Field) bool {
+	if field.EncodingRule != nil {
+		switch field.EncodingRule.Type {
+		case "element:cdata", "cdata", "name", "element:bool", "element:name", "attribute":
+			return false
+		case "element":
+			switch typ := field.Type.(type) {
+			case string:
+				field := c_getFieldByName(target, string(typ))
+				if field != nil { return c_hasReallyChilds(target, field) }
+			case Set:
+				fields := []*Field(typ)
+				for _, x := range fields {
+					if c_hasReallyChilds(target, x) { return true }
+				}
+			case SequenceOf:
+				field := c_getFieldByName(target, string(typ))
+				if field != nil { return c_hasReallyChilds(target, field) }
+			case Sequence:
+				fields := []*Field(typ)
+				for _, x := range fields {
+					if c_hasReallyChilds(target, x) { return true }
+				}
+			case Choice:
+				fields := []*Field(typ)
+				for _, x := range fields {
+					if c_hasReallyChilds(target, x) { return true }
+				}
+			case Extension:
+				return false
+			}
+		}
+	}
+	return false
+}
+
+func c_hasReallyChilds(target *Target, field *Field) bool {
+	if field.EncodingRule != nil {
+		switch field.EncodingRule.Type {
+		case "element:cdata", "element:bool", "element:name", "element":
+			if field.EncodingRule.Space == "" || field.EncodingRule.Space == target.Space {
+				return true
+			}
+		}
+	} else {
+		switch typ := field.Type.(type) {
+		case string:
+			field := c_getFieldByName(target, typ)
+			if field != nil { return c_hasReallyChilds(target, field)}
+		case Set:
+			fields := []*Field(typ)
+			for _, x := range fields {
+				if c_hasReallyChilds(target, x) { return true }
+			}
+		case SequenceOf:
+			field := c_getFieldByName(target, string(typ))
+			if field != nil {
+				return c_hasReallyChilds(target, field)
+			}
+		case Sequence:
+			fields := []*Field(typ)
+			for _, x := range fields {
+				if c_hasReallyChilds(target, x) { return true }
+			}			
+		case Choice:
+			fields := []*Field(typ)
+			for _, x := range fields {
+				if c_hasReallyChilds(target, x) { return true }
+			}			
+		case Extension:
+			return false
+		}
+	}
+	return false
+	
+}
+
+func c_generate_simplevalue_encoder(name string, field *Field) string {
+	isarray := false
+	var typ string
+	switch t := field.Type.(type) {
+	case Enum:
+		
+	case SequenceOf:
+		isarray = true
+		typ = string(t)
+	case string:
+		typ = t
+	}
+	switch typ {
+	case "string":
+		if isarray {
+			if name == "elm" {
+				return name
+			} else {
+				return "(char*)" + name
+			}
+		}
+		if name == "elm" {
+			return name
+		} else {
+			return name
+		}
+	case "boolean":
+		return "strconv_format_boolean(" + name + ")"
+	case "jid":
+		return "jid_to_string(" + name + ")"
+	case "uint":
+		return "strconv_format_uint(" + name + ")"
+	case "int":
+		return "strconv_format_int(" + name + ")"
+	case "datetime":
+		return "datetime_to_string(" + name + ")"
+	}
+	return name
+}
+
+func c_is_enum (target *Target, field *Field) bool {
+	switch typ := field.Type.(type) {
+	case string:
+		for _, f := range target.Fields {
+			if typ == f.Name {
+				if _, ok := f.Type.(Enum); ok {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func c_generate_check_condition(file *os.File, name string, target *Target, field *Field) bool {
+	switch typ := field.Type.(type) {
+	case string:
+		if typ == "boolean" {
+			file.WriteString("if (" + name + ") {\n")
+			return true
+		}
+		for _, f := range target.Fields {
+			if typ == f.Name {
+				if _, ok := f.Type.(Enum); ok {
+					file.WriteString("if (" + name + " != 0) {\n")
+					return true
+				}
+			}
+		}
+	case Sequence, SequenceOf, Set:
+		return false
+		//	case string, Extension:
+	}
+	file.WriteString("if (" + name + " != NULL) {\n")
+	return true
+}
+
+func c_getElementName(fields []*Field) *Field {
+	for _, x := range fields {
+		if x.EncodingRule != nil && x.EncodingRule.Type == "name" {
+			return x
+		}
+	}
+	return nil
+}
+
+func c_generate_extensions(filename string) {
+	fmt.Print("Generating extensions file\n")
+	file, err := os.Create(filename)
+	if err != nil { fmt.Println(err) }
+	defer file.Close()
+	file.WriteString("#include \"extensions.h\"\n")
+	file.WriteString("#include \"xstream.h\"\n\n")
+	for _, schema := range schemas {
+		extension := ""
+		if category, ok := schema.Props["category"]; ok {
+			if category == "extension" {
+				extension = "xep_"
+			}
+		}
+		filename := extension + schema.PackageName + "_data.h"
+		file.WriteString("#include \"" + filename + "\"\n")
+	}
+	file.WriteString("\n")
+	extensions_len := 0
+	file.WriteString("struct xstream_extension_t extensions[] = {\n")
+	for _, schema := range schemas {
+		for _, target := range schema.Targets {
+			for _, field := range target.Fields {
+				if (field.EncodingRule != nil && (field.EncodingRule.Type == "element" ||
+					field.EncodingRule.Type == "startelement")) || len(target.Fields) == 1 {
+					_, local := c_getSpaceAndName(target, target.Space, field)
+					name := target.Name + "_" + c_normalize(field.Name)
+					file.WriteString(" {\"" + target.Space +
+						"\", \"" + local + "\", EXTENSION_TYPE_" + c_uppercase(name) +
+						", (void *(*)(xmlreader_t*)) " +
+						name + "_decode, (int (*)(xmlwriter_t*, void*)) " +
+						name + "_encode, (void (*)(void*)) " + name + "_free},\n")
+					extensions_len++
+				}
+			}
+		}
+	}
+	file.WriteString("};\n\n")
+	file.WriteString("int extensions_len = " + strconv.FormatInt(int64(extensions_len), 10) + ";\n")
+}
+
+func c_generate_extensions_types(filename string) {
+	fmt.Print("Generating extensions file\n")
+	file, err := os.Create(filename)
+	if err != nil { fmt.Println(err) }
+	defer file.Close()
+	file.WriteString("#ifndef _EXTENSIONS_H_\n")
+	file.WriteString("#define _EXTENSIONS_H_\n\n")
+	file.WriteString("enum extension_type {\n")
+	
+	for _, schema := range schemas {
+		for _, target := range schema.Targets {
+			for _, field := range target.Fields {
+				if (field.EncodingRule != nil && (field.EncodingRule.Type == "element" ||
+					field.EncodingRule.Type == "startelement" ||
+					field.EncodingRule.Type == "element:cdata")) || len(target.Fields) == 1 {
+					name := target.Name + "_" + c_normalize(field.Name)
+					file.WriteString("  EXTENSION_TYPE_" + c_uppercase(name) + ",\n")
+				}
+			}
+		}
+	}
+	file.WriteString("};\n\n")
+	file.WriteString("#endif\n")
+}
+
+
+		
 func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 	element *Field) error {
 	if element.EncodingRule == nil {
@@ -1500,27 +1786,31 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 			file.WriteString("if (err != 0) return err;\n")
 		case SequenceOf:
 			file.WriteString("{\n")
-			file.WriteString("vlist_t* curr = (vlist_t*)" + prefix + ";\n")
-			file.WriteString("while (curr != NULL) {\n")
+			arrname := prefix
+			file.WriteString("int len = array_length (" + arrname + ");\n")
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i = 0; i < len; i++) {\n")
+			file.WriteString("extension_t* ext = array_get (" + arrname + ", i);\n")
 			if string(typ) == "extension" {
-				file.WriteString("err = xstream_extension_encode(writer, curr->data, curr->type);\n")
+				file.WriteString("err = xstream_extension_encode(writer, ext->data, ext->type);\n")
 				file.WriteString("if (err != 0) return err;\n")
 			} else {
 				encoder, err := c_getExtensionEncoder(target.Space, string(typ))
 				if err != nil { return err }
-				file.WriteString("err = " + encoder + " (writer, curr->data);\n")
+				file.WriteString("err = " + encoder + " (writer, ext->data);\n")
 				file.WriteString("if (err != 0) return err;\n")
 			}
-			file.WriteString("curr = curr->next;\n")
 			file.WriteString("}\n")
 			file.WriteString("}\n")
 		case Sequence:
 			file.WriteString("{\n")
-			file.WriteString("vlist_t* curr = " + prefix + ";\n")
-			file.WriteString("while (curr != NULL) {\n")
-			file.WriteString("err = xstream_extension_encode (writer, curr->data, curr->type);\n")
+			arrname := prefix
+			file.WriteString("int len = array_length (" + arrname + ");\n")
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i = 0; i < len; i++) {\n")
+			file.WriteString("extension_t* ext = array_get (" + arrname + ", i);\n")
+			file.WriteString("err = xstream_extension_encode (writer, ext->data, ext->type);\n")
 			file.WriteString("if (err != 0) return -1;\n")
-			file.WriteString("curr = curr->next;\n")
 			file.WriteString("}\n")
 			file.WriteString("}\n")
 		case Set:
@@ -1553,20 +1843,21 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 		varname := prefix
 		isarray := false
 		if _, ok := element.Type.(SequenceOf); ok {
-			varname = "curr->data"
+			varname = "value"
 			isarray = true
 		}
-		// value := c_generate_simplevalue_encoder(varname, element)
 		value := c_makeConverterToValue(target, element, varname)
 		if isarray {
-			file.WriteString("vlist_t* curr = " + prefix + ";\n")
-			file.WriteString("while (curr != NULL) {\n")
+			arrname := prefix
+			file.WriteString("int len = array_length (" + arrname + ");\n")
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i = 0; i < len; i++) {\n")
+			file.WriteString("char** value = array_get (" + arrname + ", i);\n")
 		} 
 		file.WriteString("err = xmlwriter_simple_element (writer, " + space + ", \"" + local + "\", " +
 			value + ");\n")
 		file.WriteString("if (err != 0) return err;\n")
 		if isarray {
-			file.WriteString("curr = curr->next;\n")
 			file.WriteString("}\n")
 		}
 	case "element:bool":
@@ -1581,7 +1872,6 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 				"\");\n")
 			file.WriteString("if (err != 0) return err;\n")
 			if typ.Local != "" {
-				file.WriteString("//here\n");
 				encoder, err := c_getExtensionEncoder(typ.Space, typ.Local)
 				if err != nil { return err }
 				file.WriteString("err = " + encoder + "(writer, " + prefix + ");\n")
@@ -1697,28 +1987,24 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 			file.WriteString("err = xmlwriter_start_element (writer, " + space + ", \"" + local +
 				"\");\n")
 			file.WriteString("if (err != 0) return err;\n")
-			if prefix == "elm" {
-				// file.WriteString("vlist_t* curr = " + prefix + "->extensions;\n")
-				file.WriteString("vlist_t* curr = (vlist_t*)" + prefix + ";\n")
-			} else {
-				file.WriteString("vlist_t* curr = " + prefix + ";\n")
-			}
-			file.WriteString("while (curr != NULL) {\n")
+			arrname := prefix
+			file.WriteString("int len = array_length (" + arrname + ");\n")
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i = 0; i < len; i++) {\n")
 			if typ == "extension" {
-				file.WriteString("err = xstream_extension_encode (writer, curr->data, curr->type);\n")
+				file.WriteString("extension_t* ext = array_get (" + arrname + ", i);\n")
+				file.WriteString("err = xstream_extension_encode (writer, ext->data, ext->type);\n")
 				file.WriteString("if (err != 0) return err;\n")
 			} else {
-				//+++
 				field := c_getFieldByName(target, string(typ))
 				if field == nil { return errors.New("unknown type " + string(typ)) }
 				space, local := c_getSpaceAndName(target, target.Space, field)
-				file.WriteString("//tut\n")
 				encoder, err := c_getExtensionEncoder(space, local)
 				if err != nil { return err }
-				file.WriteString("err = " + encoder + "(writer, curr->data);\n")
+				file.WriteString(c_referenceType(target, field) + " data = array_get (" + arrname + ", i);\n")
+				file.WriteString("err = " + encoder + "(writer, data);\n")
 				file.WriteString("if (err != 0) return err;\n")
 			}
-			file.WriteString("curr = curr->next;\n")
 			file.WriteString("}\n")
 			file.WriteString("err = xmlwriter_end_element(writer);\n")
 			file.WriteString("if (err != 0) return err;\n")
@@ -1737,220 +2023,227 @@ func c_generate_element_encoder(file *os.File, target *Target, prefix string,
 	return nil
 }
 
-func c_hasChilds(target *Target, field *Field) bool {
-	if field.EncodingRule != nil {
-		switch field.EncodingRule.Type {
-		case "element:cdata", "cdata", "name", "element:bool", "element:name", "attribute":
-			return false
-		case "element":
-			switch typ := field.Type.(type) {
-			case string:
-				field := c_getFieldByName(target, string(typ))
-				if field != nil { return c_hasReallyChilds(target, field) }
-			case Set:
-				fields := []*Field(typ)
-				for _, x := range fields {
-					if c_hasReallyChilds(target, x) { return true }
-				}
-			case SequenceOf:
-				field := c_getFieldByName(target, string(typ))
-				if field != nil { return c_hasReallyChilds(target, field) }
-			case Sequence:
-				fields := []*Field(typ)
-				for _, x := range fields {
-					if c_hasReallyChilds(target, x) { return true }
-				}
-			case Choice:
-				fields := []*Field(typ)
-				for _, x := range fields {
-					if c_hasReallyChilds(target, x) { return true }
-				}
-			case Extension:
-				return false
-			}
-		}
+func c_generate_free(file *os.File, target *Target, prefix string, element *Field) error {
+	if c_is_enum(target, element) {
+		return nil
 	}
-	return false
-}
-
-func c_hasReallyChilds(target *Target, field *Field) bool {
-	if field.EncodingRule != nil {
-		switch field.EncodingRule.Type {
-		case "element:cdata", "element:bool", "element:name", "element":
-			if field.EncodingRule.Space == "" || field.EncodingRule.Space == target.Space {
-				return true
+	if element.EncodingRule == nil {
+		switch typ := element.Type.(type) {
+		case Extension:
+			if typ.Local == "" {
+				file.WriteString("xstream_extension_free (" + prefix + ");\n")
+				file.WriteString("free (" + prefix + ");\n")
+			} else {
+				freer, err := c_getExtensionFree(typ.Space, typ.Local)
+				if err != nil {return err}
+				file.WriteString(freer + "(" + prefix + ");\n")
 			}
-		}
-	} else {
-		switch typ := field.Type.(type) {
 		case string:
-			field := c_getFieldByName(target, typ)
-			if field != nil { return c_hasReallyChilds(target, field)}
+			freer, err := c_getExtensionFree(target.Name, string(typ))
+			if err != nil { return err }
+			file.WriteString(freer + "(" + prefix + ");\n")
+		case SequenceOf:
+			file.WriteString("{\n")
+			arrname := prefix
+			file.WriteString("int len = array_length (" + arrname + ");\n")
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i = 0; i < len; i++) {\n")
+			if string(typ) == "extension" {
+				file.WriteString("extension_t* ext = array_get (" + arrname + ", i);\n")
+				file.WriteString("xstream_extension_free (ext);\n")
+			} else {
+				freer, err := c_getExtensionFree(target.Space, string(typ))
+				if err != nil { return err }
+				file.WriteString(freer + " (array_get (" + prefix + ", i));\n")
+			}
+			file.WriteString("}\n")
+			file.WriteString("array_free (" + arrname + ");\n")
+			file.WriteString("}\n")
+		case Sequence:
+			file.WriteString("{\n")
+			arrname := prefix
+			file.WriteString("int len = array_length (" + arrname + ");\n")
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i = 0; i < len; i++) {\n")
+			file.WriteString("extension_t* ext = array_get (" + arrname + ", i);\n")
+			file.WriteString("xstream_extension_free (ext);\n")
+			file.WriteString("}\n")
+			file.WriteString("array_free (" + arrname + ");\n")
+			file.WriteString("}\n")
 		case Set:
 			fields := []*Field(typ)
-			for _, x := range fields {
-				if c_hasReallyChilds(target, x) { return true }
+			sep := "."
+			if prefix == "data" {
+				sep = "->"
 			}
-		case SequenceOf:
-			field := c_getFieldByName(target, string(typ))
-			if field != nil {
-				return c_hasReallyChilds(target, field)
-			}
-		case Sequence:
-			fields := []*Field(typ)
 			for _, x := range fields {
-				if c_hasReallyChilds(target, x) { return true }
-			}			
-		case Choice:
-			fields := []*Field(typ)
-			for _, x := range fields {
-				if c_hasReallyChilds(target, x) { return true }
-			}			
-		case Extension:
-			return false
-		}
-	}
-	return false
-	
-}
-
-func c_generate_simplevalue_encoder(name string, field *Field) string {
-	isarray := false
-	var typ string
-	switch t := field.Type.(type) {
-	case Enum:
-		
-	case SequenceOf:
-		isarray = true
-		typ = string(t)
-	case string:
-		typ = t
-	}
-	switch typ {
-	case "string":
-		if isarray {
-			if name == "elm" {
-				return name
-			} else {
-				return name
-			}
-		}
-		if name == "elm" {
-			return name
-		} else {
-			return name
-		}
-	case "boolean":
-		return "strconv_format_boolean(" + name + ")"
-	case "jid":
-		return "jid_to_string(" + name + ")"
-	case "uint":
-		return "strconv_format_uint(" + name + ")"
-	case "int":
-		return "strconv_format_int(" + name + ")"
-	case "datetime":
-		return "datetime_to_string(" + name + ")"
-	}
-	return name
-}
-
-func c_generate_check_condition(file *os.File, name string, target *Target, field *Field) bool {
-	switch typ := field.Type.(type) {
-	case string:
-		if typ == "boolean" {
-			file.WriteString("if (" + name + ") {\n")
-			return true
-		}
-		for _, f := range target.Fields {
-			if typ == f.Name {
-				if _, ok := f.Type.(Enum); ok {
-					file.WriteString("if (" + name + " != 0) {\n")
-					return true
+				close := c_generate_check_condition(file, prefix + sep + c_makeIdent(x.Name), target, x)
+				c_generate_free(file, target, prefix + sep + c_makeIdent(x.Name), x)
+				if close {
+					file.WriteString("}\n")
 				}
 			}
+		case Choice:
+			file.WriteString("if (" + prefix + " != NULL) {\n")
+			file.WriteString("if err = " + prefix + ".(xmlencoder.Extension).Encode(e); err != nil { return err }\n")
+			file.WriteString("}\n")
+		default:
+			fmt.Println("dont know what to do ", element.Name, " ", element.Type)
 		}
-	case Sequence, SequenceOf, Set:
-		return false
-		//	case string, Extension:
+		return nil
 	}
-	file.WriteString("if (" + name + " != NULL) {\n")
-	return true
-}
-
-func c_getElementName(fields []*Field) *Field {
-	for _, x := range fields {
-		if x.EncodingRule != nil && x.EncodingRule.Type == "name" {
-			return x
+	// fieldname := c_makeIdent(element.Name)
+	// space, local := c_getSpaceAndName(target, target.Space, element)
+	switch element.EncodingRule.Type {
+	case "element:name":
+	case "element:cdata":
+		funcname := "free"
+		var typ string
+		switch tt := element.Type.(type) {
+		case string:
+			typ = tt
+		case SequenceOf:
+			typ = string(tt)
+		}
+		switch typ {
+		case "jid": funcname = "jid_free"
+		}
+		isarray := false
+		if _, ok := element.Type.(SequenceOf); ok {
+			isarray = true
+		}
+		if isarray {
+			arrname := prefix
+			file.WriteString("int len = array_length (" + arrname + ");\n")
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i = 0; i < len; i++) {\n")
+			file.WriteString("char** value = array_get (" + arrname + ", i);\n")
+			file.WriteString(funcname +"(*value);\n")
+			file.WriteString("}\n")
+			file.WriteString("array_free (" + arrname + ");\n")
+		} else {
+			file.WriteString(funcname + " (" + prefix + ");\n")
+		}
+	case "element:bool":
+	case "startelement", "element":
+		switch typ := element.Type.(type) {
+		case Extension:
+			// space, local := c_getSpaceAndName(target, target.Space, element)
+			if typ.Local != "" {
+				freer, err := c_getExtensionFree(typ.Space, typ.Local)
+				if err != nil { return err }
+				file.WriteString(freer + "(" + prefix + ");\n")
+			} else {
+				file.WriteString("todo();\n")
+			}
+		case Set:
+			sep := "->"
+			if prefix != "data" {
+				sep = "."
+			}
+			fields := []*Field(typ)
+			for _, x := range fields {
+				if x.EncodingRule != nil && x.EncodingRule.Type == "attribute" {
+					if c_is_enum(target, x) {
+						continue;
+					}
+					close := c_generate_check_condition(file, prefix + sep + c_makeIdent(x.Name), target, x)
+					varname := prefix + sep + c_makeIdent(x.Name)
+					switch typ := x.Type.(type) {
+					case string:
+						switch typ {
+						case "string", "boolean", "uint", "int", "datetime", "xmllang":
+							file.WriteString("free (" + varname + ");\n")
+						case "jid":
+							file.WriteString("jid_free (" + varname + ");\n")
+						// default:
+							// file.WriteString("free (" + varname + ");\n")
+						}
+					}
+					if close {
+						file.WriteString("}\n")
+					}
+				}
+			}
+			for _, x := range fields {
+				if x.EncodingRule != nil &&
+					(x.EncodingRule.Type == "name" ||
+					x.EncodingRule.Type == "cdata" || x.EncodingRule.Type == "attribute") {
+					continue
+				}
+				name := prefix
+				if _, ok := x.Type.(Choice); ok {
+					name += "->u"
+					close := c_generate_check_condition(file, name, target, x)
+					file.WriteString("extension_t ext = {" + prefix + "->type, " + name + "};\n")
+					file.WriteString("xstream_extension_free (&ext);\n")
+					if close {
+						file.WriteString("}\n")
+					}
+				} else {
+					name += sep + c_makeIdent(x.Name)
+					close := c_generate_check_condition(file, name, target, x)
+					c_generate_free(file, target, name, x)
+					if close {
+					file.WriteString("}\n")
+					}
+				}
+			}
+			for _, x := range fields {
+				if x.EncodingRule != nil && x.EncodingRule.Type == "cdata" {
+					file.WriteString("if (" + prefix + sep + c_makeIdent(x.Name) + " != NULL) {\n")
+					typ := x.Type.(string)
+					if typ == "bytestring" {
+						file.WriteString("free (" + prefix + sep + c_makeIdent(x.Name) + ");\n")
+					} else {
+						value := c_generate_simplevalue_encoder(prefix + sep + c_makeIdent(x.Name), x)
+						file.WriteString("free (" + value + ");\n")
+					}
+					file.WriteString("}\n")
+				}
+			}
+			if element.EncodingRule.Type == "element" {
+			}
+		case string:
+			switch typ {
+			case "langstring":
+				file.WriteString("langstring_free (" + prefix + ");\n")
+			case "extension":
+				file.WriteString(prefix + ".(xmlencoder.Extension).Encode(e)\n")
+			default:
+				file.WriteString(prefix + ".Encode(e)\n")
+			}
+		case Choice:
+			if prefix == "data" {
+				file.WriteString("if err = elm.Payload.(xmlencoder.Extension).Encode(e); err != nil { return err }\n")
+			} else {
+				file.WriteString("if err = " + prefix + ".(xmlencoder.Extension).Encode(e); err != nil { return err }\n")
+			}
+		case SequenceOf:
+			file.WriteString("int len = array_length (" + prefix + ");\n")
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i = 0; i < len; i++) {\n")
+			if typ == "extension" {
+				file.WriteString("extension_t* ext = array_get (" + prefix + ", i);\n")
+				file.WriteString("xstream_extension_free (ext);\n")
+			} else {
+				field := c_getFieldByName(target, string(typ))
+				if field == nil { return errors.New("unknown type " + string(typ)) }
+				space, local := c_getSpaceAndName(target, target.Space, field)
+				freer, err := c_getExtensionFree(space, local)
+				if err != nil { return err }
+//++
+				file.WriteString(c_referenceType(target, field) + " item = array_get (" + prefix + ", i);\n")
+				file.WriteString(freer + "(item);\n")
+			}
+			file.WriteString("}\n")
+			file.WriteString("array_free (" + prefix + ");\n")
+		case Sequence:
+			file.WriteString("int i = 0;\n")
+			file.WriteString("for (i; i < " + prefix + "->length; i++) {\n")
+			file.WriteString("if err = x.(xmlencoder.Extension).Encode(e); err != nil { return err }\n")
+			file.WriteString("}\n")
 		}
 	}
 	return nil
 }
-
-func c_generate_extensions(filename string) {
-	fmt.Print("Generating extensions file\n")
-	file, err := os.Create(filename)
-	if err != nil { fmt.Println(err) }
-	defer file.Close()
-	file.WriteString("#include \"extensions.h\"\n")
-	file.WriteString("#include \"xstream.h\"\n\n")
-	for _, schema := range schemas {
-		extension := ""
-		if category, ok := schema.Props["category"]; ok {
-			if category == "extension" {
-				extension = "xep_"
-			}
-		}
-		filename := extension + schema.PackageName + "_data.h"
-		file.WriteString("#include \"" + filename + "\"\n")
-	}
-	file.WriteString("\n")
-	extensions_len := 0
-	file.WriteString("struct xstream_extension_t extensions[] = {\n")
-	for _, schema := range schemas {
-		for _, target := range schema.Targets {
-			for _, field := range target.Fields {
-				if (field.EncodingRule != nil && (field.EncodingRule.Type == "element" ||
-					field.EncodingRule.Type == "startelement")) || len(target.Fields) == 1 {
-					_, local := c_getSpaceAndName(target, target.Space, field)
-					name := target.Name + "_" + c_normalize(field.Name)
-					file.WriteString(" {\"" + target.Space +
-						"\", \"" + local + "\", EXTENSION_TYPE_" + c_uppercase(name) +
-						", (void *(*)(xmlreader_t*)) " +
-						name + "_decode, (int (*)(xmlwriter_t*, void*)) " +
-						name + "_encode},\n")
-					extensions_len++
-				}
-			}
-		}
-	}
-	file.WriteString("};\n\n")
-	file.WriteString("int extensions_len = " + strconv.FormatInt(int64(extensions_len), 10) + ";\n")
-}
-
-func c_generate_extensions_types(filename string) {
-	fmt.Print("Generating extensions file\n")
-	file, err := os.Create(filename)
-	if err != nil { fmt.Println(err) }
-	defer file.Close()
-	file.WriteString("#ifndef _EXTENSIONS_H_\n")
-	file.WriteString("#define _EXTENSIONS_H_\n\n")
-	file.WriteString("enum extension_type {\n")
-	
-	for _, schema := range schemas {
-		for _, target := range schema.Targets {
-			for _, field := range target.Fields {
-				if (field.EncodingRule != nil && (field.EncodingRule.Type == "element" ||
-					field.EncodingRule.Type == "startelement" ||
-					field.EncodingRule.Type == "element:cdata")) || len(target.Fields) == 1 {
-					name := target.Name + "_" + c_normalize(field.Name)
-					file.WriteString("  EXTENSION_TYPE_" + c_uppercase(name) + ",\n")
-				}
-			}
-		}
-	}
-	file.WriteString("};\n\n")
-	file.WriteString("#endif\n")
-}
-
-
-			
