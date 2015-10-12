@@ -164,7 +164,7 @@ ADR ::= set {
       PHONETIC
       BINVAL
       EXTVAL
-    } name
+    } element:name
     value string cdata
   } element
                                                                                 

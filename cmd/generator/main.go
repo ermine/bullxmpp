@@ -38,6 +38,10 @@ type Config struct {
 		Outdir string
 		Package_prefix string
 	}
+	Kotlin struct {
+		Outdir string
+		Package_prefix string
+	}
 	Ocaml struct {
 		Outdir string
 		Extensionfile string
@@ -62,7 +66,7 @@ func main() {
 		os.Exit(1)
 	}
 	file := flag.String("file", "", "parse only this file")
-	lang := flag.String("language", "golang", "Code language (golang, java, ocaml or c)")
+	lang := flag.String("language", "golang", "Code language (golang, java, kotlin, ocaml or c)")
 	flag.Parse()
 	err = gcfg.ReadFileInto(&cfg, *cfgfile)
 	checkError(err)
@@ -93,6 +97,8 @@ func main() {
 		err = GolangGenerate()
 	case "java":
 		err = JavaGenerate()
+	case "kotlin":
+		err = KotlinGenerate()
 	case "ocaml":
 		err = OcamlGenerate()
 	case "c":

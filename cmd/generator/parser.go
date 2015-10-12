@@ -243,6 +243,7 @@ func (target *Target) parseDef(buf *Buf, field *Field) error {
 	case "\n":
 		return ErrBadSyntax
 	case "extension":
+		required := false
 		next = getToken(buf)
 		switch next {
 		case "":
@@ -256,8 +257,13 @@ func (target *Target) parseDef(buf *Buf, field *Field) error {
 			if closed != ")" {
 				return ErrBadSyntax
 			}
-			field.Type = Extension{space, local}
 			next = getToken(buf)
+			if next == "required" {
+				required = true
+				next = getToken(buf)
+			}
+			field.Type = Extension{space, local}
+			field.Required = required
 		}
 	case "set":
 		set, err := parseSet(buf)
@@ -441,7 +447,6 @@ func parseFields(buf *Buf) ([]*Field, error) {
 			typ = next
 			next = getToken(buf)
 		}
-		
 		var encoding *Encoding
 		required := false
 		defaultValue := ""
@@ -450,6 +455,8 @@ func parseFields(buf *Buf) ([]*Field, error) {
 			return nil, ErrUnexpectedEOF
 		case "\n":
 			break
+		case "required":
+			required = true
 		default:
 			enctype := next
 			var encspace, encname string

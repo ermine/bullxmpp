@@ -1047,8 +1047,10 @@ return err
 
 func (elm *SOUND) Encode(e *xmlencoder.Encoder) error {
 var err error
-if err = e.StartElement(NS, string(*elm.Type)); err != nil { return err }
+if err = e.StartElement(NS, "SOUND"); err != nil { return err }
 if elm.Type != nil {
+if err = e.StartElement(NS, string(*elm.Type)); err != nil { return err }
+if err = e.EndElement(); err != nil { return err }
 }
 if elm.Value != nil {
 if err = e.Text(*elm.Value); err != nil { return err }
@@ -1059,6 +1061,23 @@ return nil
 
 func (elm *SOUND) Decode(d *xmlencoder.Decoder, tag *xml.StartElement) error {
 var err error
+var t xml.Token
+Loop:
+for {
+if t, err = d.Token(); err != nil { return err }
+switch t := t.(type) {
+case xml.EndElement:
+break Loop
+case xml.StartElement:
+switch {
+default:
+if t.Name.Space == NS {
+*elm.Type = SOUNDType(t.Name.Local)
+if err = d.Skip(); err != nil { return err }
+}
+}
+}
+}
 var s string
 if s, err = d.Text(); err != nil { return err }
 *elm.Value = s
