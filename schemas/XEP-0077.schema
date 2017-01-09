@@ -2,7 +2,8 @@ package iqregister
 category extension
 targetNamespace jabber:iq:register {
 
-*query ::= set {
+@decode
+query ::= set {
   fields set {
       registered boolean element:bool
       instructions string element:cdata

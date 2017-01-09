@@ -41,6 +41,7 @@ type Config struct {
 	Kotlin struct {
 		Outdir string
 		Package_prefix string
+		Package_prefix_data string
 	}
 	Ocaml struct {
 		Outdir string

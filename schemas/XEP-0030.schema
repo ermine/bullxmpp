@@ -2,8 +2,9 @@ package disco
 category extension
 targetNamespace http://jabber.org/protocol/disco#info {
   name = info
-  
-  *info ::= set {
+ 
+  @decode 
+  info ::= set {
     node string attribute
     identities sequence of identity
     features sequence of feature
@@ -21,7 +22,9 @@ targetNamespace http://jabber.org/protocol/disco#info {
 
 targetNamespace http://jabber.org/protocol/disco#items {
   name = items
-  *items := {
+
+  @decode
+  items := {
     node string attribute
     items sequence of item  
   } element(query)

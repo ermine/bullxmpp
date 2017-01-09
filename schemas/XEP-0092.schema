@@ -2,7 +2,9 @@ package iqversion
 category extension
 targetNamespace jabber:iq:version {
 
-  *version ::= set {
+  @decode
+  @iq get:empty result
+  version ::= set {
     name string element:cdata required
     version string element:cdata required
     os string element:cdata

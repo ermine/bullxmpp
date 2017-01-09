@@ -76,40 +76,57 @@ func (schema *Schema) parseSchema(buf *Buf) error {
 	return nil
 }
 
+
+func (target *Target) parseAnnot(buf *Buf) (*Annotation, error) {
+	ident := getToken(buf)
+	switch ident {
+	case "": return nil, ErrUnexpectedEOF
+	case "decode", "iq":
+		var params []string
+		for ;; {
+			next := getToken(buf)
+			switch next {
+			case "": return nil, ErrUnexpectedEOF
+			case "\n": return &Annotation{ident, params}, nil
+			default: params = append(params, next)
+			}
+		}
+	}
+	return nil, ErrBadSyntax
+}
+
 func (target *Target) parseDefs(buf *Buf) error {
 Loop:
 	for {
-		skipSpaceWithNewline(buf)
-		ident := getToken(buf)
-		switch ident {
-		case "":
-			return ErrUnexpectedEOF
-		case "}":
-			break Loop
-		default:
-			next := getToken(buf)
-			switch next {
+		var annotations []*Annotation
+		for {
+			skipSpaceWithNewline(buf)
+			ident := getToken(buf)
+			switch ident {
 			case "":
 				return ErrUnexpectedEOF
-			case "=":
-				rest := getRest(buf)
-				target.Props[ident] = rest
-			case "::=":
-				var reciver string
-				b := []rune(ident)[0]
-				switch b {
-				case '*': reciver = "both"
-				case '+': reciver = "server"
-				case '-': reciver = "client"
-				}
-				if reciver != "" {
-					ident = string([]rune(ident)[1:])
-				}
-				field := Field{Name:ident, Reciver_type:reciver}
-				if err := target.parseDef(buf, &field); err != nil { return err }
+			case "@":
+				annot, err := target.parseAnnot(buf)
+				if err != nil { return err }
+				annotations = append(annotations, annot)
+			case "}":
+				break Loop
 			default:
-				fmt.Println("unknown token " + next)
-				return ErrBadSyntax
+				next := getToken(buf)
+				switch next {
+				case "":
+					return ErrUnexpectedEOF
+				case "=":
+					rest := getRest(buf)
+					target.Props[ident] = rest
+				case "::=":
+					field := Field{Name:ident, Annotations: annotations}
+					if err := target.parseDef(buf, &field); err != nil { return err }
+				default:
+					fmt.Println("unknown token " + next)
+					return ErrBadSyntax
+				}
+				continue Loop
 			}
 		}
 	}
@@ -142,7 +159,7 @@ func getToken(buf *Buf) string {
 		buf.idx++
 		skipSpaceWithNewline(buf)
 		i = buf.idx
-	case '=':
+	case '=', '@':
 		ident = string(b)
 		i++
 	case ':':
@@ -266,17 +283,17 @@ func (target *Target) parseDef(buf *Buf, field *Field) error {
 			field.Required = required
 		}
 	case "set":
-		set, err := parseSet(buf)
+		set, err := parseSet(buf, field)
 		if err != nil { return err }
 		field.Type = set
 		next = getToken(buf)
 	case "choice":
-		choice, err := parseChoice(buf)
+		choice, err := parseChoice(buf, field)
 		if err != nil { return err }
 		field.Type = choice
 		next = getToken(buf)
 	case "sequence":
-		sequence, err := parseSequence(buf)
+		sequence, err := parseSequence(buf, field)
 		if err != nil { return err }
 		field.Type = sequence
 		next = getToken(buf)
@@ -342,7 +359,7 @@ Loop:
 	return values, nil
 }
 
-func parseSequence(buf *Buf) (interface{}, error) {
+func parseSequence(buf *Buf, parent *Field) (interface{}, error) {
 	switch getToken(buf) {
 	case "":
 		return nil, ErrUnexpectedEOF
@@ -353,14 +370,14 @@ func parseSequence(buf *Buf) (interface{}, error) {
 		}
 		return SequenceOf(next), nil
 	case "{":
-		fields, err := parseFields(buf)
+		fields, err := parseFields(buf, parent)
 		if err != nil { return nil, err }
 		return Sequence(fields), nil
 	}
 	return nil, ErrBadSyntax
 }
 
-func parseSet(buf *Buf) (Set, error) {
+func parseSet(buf *Buf, field *Field) (Set, error) {
 	bracket := getToken(buf)
 	if bracket == "" {
 		return nil, ErrUnexpectedEOF
@@ -368,12 +385,12 @@ func parseSet(buf *Buf) (Set, error) {
 	if bracket != "{" {
 		return nil, ErrBadSyntax
 	}
-	fields, err := parseFields(buf)
+	fields, err := parseFields(buf, field)
 	if err != nil { return nil, err }
 	return Set(fields), nil
 }
 
-func parseChoice(buf *Buf) (Choice, error) {
+func parseChoice(buf *Buf, parent *Field) (Choice, error) {
 	bracket := getToken(buf)
 	if bracket == "" {
 		return nil, ErrUnexpectedEOF
@@ -381,12 +398,12 @@ func parseChoice(buf *Buf) (Choice, error) {
 	if bracket != "{" {
 		return nil, ErrBadSyntax
 	}
-	fields, err := parseFields(buf)
+	fields, err := parseFields(buf, parent)
 	if err != nil { return nil, err }
 	return Choice(fields), nil
 }
 
-func parseFields(buf *Buf) ([]*Field, error) {
+func parseFields(buf *Buf, parent *Field) ([]*Field, error) {
 	var fields []*Field
 
 	for {
@@ -404,7 +421,7 @@ func parseFields(buf *Buf) ([]*Field, error) {
 		case "":
 			return nil, ErrUnexpectedEOF
 		case "\n":
-			fields = append(fields, &Field{Type:name})
+			fields = append(fields, &Field{Type:name, Parent:parent})
 			continue
 		case "extension":
 			next = getToken(buf)
@@ -424,17 +441,17 @@ func parseFields(buf *Buf) ([]*Field, error) {
 				next = getToken(buf)
 			}
 		case "set":
-			set, err := parseSet(buf)
+			set, err := parseSet(buf, parent)
 			if err != nil { return nil, err }
 			typ = set
 			next = getToken(buf)
 		case "choice":
-			choice, err := parseChoice(buf)
+			choice, err := parseChoice(buf, parent)
 			if err != nil { return nil, err }
 			typ = choice
 			next = getToken(buf)
 		case "sequence":
-			sequence, err := parseSequence(buf)
+			sequence, err := parseSequence(buf, parent)
 			if err != nil { return nil, err }
 			typ = sequence
 			next = getToken(buf)
@@ -499,14 +516,14 @@ func parseFields(buf *Buf) ([]*Field, error) {
 				return nil, ErrBadSyntax
 			}
 		}
-		fields = append(fields, &Field{Name:name, Type:typ, Required:required,
+		fields = append(fields, &Field{Name:name, Type:typ, Required:required, Parent:parent,
 			EncodingRule:encoding, DefaultValue:defaultValue})
 	}
 	return fields, nil
 }
 
 /*
-func parseType(buf *Buf) (interface{}, error) {
+func parseType(buf *Buf, parent *Field) (interface{}, error) {
 	var typ interface{}
 	next := getToken(buf)
 	switch next {
@@ -521,7 +538,7 @@ func parseType(buf *Buf) (interface{}, error) {
 		if err != nil { return nil, err }
 		typ = choice
 	case "sequence":
-		sequence, err := parseSequence(buf)
+		sequence, err := parseSequence(buf, parent)
 		if err != nil { return nil, err }
 		typ = sequence
 	case "enum":

@@ -2,7 +2,8 @@ package roster
 category core
 targetNamespace jabber:iq:roster {
 
-  *roster ::= set {
+  @decode
+  roster ::= set {
     ver string attribute
     items sequence of item
   } element(query)

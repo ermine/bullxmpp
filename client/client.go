@@ -40,12 +40,6 @@ func NewWithJID(jid_ *jid.JID, password, lang string, secure bool, logging bool)
 		return
 	}
 
-	xmlencoder.UseExtension(stream.NS)
-	xmlencoder.UseExtension(starttls.NS)
-	xmlencoder.UseExtension(sasl.NS)
-	xmlencoder.UseExtension(bind.NS)
-	xmlencoder.UseExtension(session.NS)
-	xmlencoder.UseExtension(NS)
 	xmlencoder.ReplaceExtensionStruct(xml.Name{starttls.NS, "starttls"}, TLSFeature{})
 	xmlencoder.ReplaceExtensionStruct(xml.Name{sasl.NS, "mechanisms"}, SASLFeature{})
 	xmlencoder.ReplaceExtensionStruct(xml.Name{bind.NS, "bind"}, BindFeature{})

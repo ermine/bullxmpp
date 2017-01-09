@@ -1298,19 +1298,19 @@ func golang_generate_simplevalue_decoder(file *os.File, target *Target, prefix, 
 func golang_generate_init(file *os.File, target *Target) {
 	file.WriteString("func init() {\n")
 	for _, x := range target.Fields {
-		if x.Reciver_type != "" {
+		if isForClient(x) || isForServer(x) {
 			local := x.Name
 			if x.EncodingRule != nil && x.EncodingRule.Name != "" {
 				local = x.EncodingRule.Name
 			}
 			file.WriteString(" xmlencoder.AddExtension(xml.Name{NS, \"" + local + "\"}, ")
 			file.WriteString(golang_makeIdent(x.Name) + "{}, ")
-			switch x.Reciver_type {
-			case "both":
+			switch {
+			case isForClient(x) && isForServer(x):
 				file.WriteString("true, true)\n")
-			case "server":
+			case isForClient(x):
 				file.WriteString("true, false)\n")
-			case "client":
+			case isForServer(x):
 				file.WriteString("false, true)\n")
 			}
 		}

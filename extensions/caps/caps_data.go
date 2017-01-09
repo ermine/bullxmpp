@@ -46,4 +46,5 @@ return err
 }
 
 func init() {
+ xmlencoder.AddExtension(xml.Name{NS, "c"}, Caps{}, true, true)
 }

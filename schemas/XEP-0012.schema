@@ -2,7 +2,8 @@ package iqlast
 category extension
 targetNamespace jabber:iq:last {
 
-  *last ::= set {
+  @decode
+  last ::= set {
     seconds uint attribute
     extra string cdata
   } element(query)

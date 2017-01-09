@@ -2,6 +2,7 @@ package caps
 category extension
 targetNamespace http://jabber.org/protocol/caps {
 
+  @decode
   caps ::= set {
     ext string attribute
     hash string attribute required

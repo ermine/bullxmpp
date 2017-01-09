@@ -4,7 +4,6 @@ import (
 	"flag"
 	"github.com/stvp/go-toml-config" 
 	"github.com/ermine/bullxmpp/client"
-	"github.com/ermine/bullxmpp/xmlencoder"
 	"github.com/ermine/bullxmpp/extensions/iqversion"
 	"fmt"
 	"os"
@@ -28,7 +27,6 @@ func main() {
 	loadConfig()
 	cli, err := client.New(*myjid, *password, "ru", true, true)
 	checkError(err)
-	xmlencoder.UseExtension(iqversion.NS)
 	for {
 		p, err := cli.Read()
 		checkError(err)

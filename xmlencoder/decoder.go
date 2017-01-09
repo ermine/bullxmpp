@@ -90,13 +90,12 @@ type ExtensionType struct {
 	Type reflect.Type
 	ForClient bool
 	ForServer bool
-	Use bool
 }
 
 var Extensions = map[xml.Name]*ExtensionType{}
 
 func AddExtension(xmlname xml.Name, i interface{}, forServer, forClient bool) {
-	Extensions[xmlname] = &ExtensionType{reflect.TypeOf(i), forServer, forClient, false}
+	Extensions[xmlname] = &ExtensionType{reflect.TypeOf(i), forServer, forClient}
 }
 
 func ReplaceExtensionStruct(xmlname xml.Name, i interface{}) {
@@ -107,19 +106,7 @@ func ReplaceExtensionStruct(xmlname xml.Name, i interface{}) {
 
 func GetExtension(xmlname xml.Name) (interface{}, bool) {
 	if typ, ok := Extensions[xmlname]; ok {
-		if typ.Use {
-			return reflect.New(typ.Type).Interface(), true
-		} else {
-			return nil, false
-		}
+		return reflect.New(typ.Type).Interface(), true
 	}
 	return nil, false
-}
-
-func UseExtension(ns string) {
-	for name, t := range Extensions {
-		if name.Space == ns && t.ForClient {
-			t.Use = true
-		}
-	}
 }

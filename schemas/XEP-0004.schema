@@ -2,7 +2,8 @@ package xdata
 category extension
 targetNamespace jabber:x:data {
 
-  *x ::= set {
+  @decode
+  x ::= set {
     type enum {
       cancel
       form

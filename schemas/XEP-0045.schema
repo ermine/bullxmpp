@@ -3,7 +3,8 @@ category extension
 
 targetNamespace http://jabber.org/protocol/muc {
 
-  *enter ::= set {
+  @decode
+  enter ::= set {
     history set {
       maxchars int attribute
       maxstanzas int attribute
@@ -17,7 +18,8 @@ targetNamespace http://jabber.org/protocol/muc {
 targetNamespace http://jabber.org/protocol/muc#user {
   name = user
 
-  *action ::= set {
+  @decode
+  action ::= set {
     decline
     destroy
     invite sequence of invite
@@ -74,9 +76,11 @@ targetNamespace http://jabber.org/protocol/muc#user {
 targetNamespace http://jabber.org/protocol/muc#owner {
   name = owner
 
-  *configure ::= extension(jabber:x:data x) element(query)
-  
-  *destroy ::= set {
+  @decode
+  configure ::= extension(jabber:x:data x) element(query)
+ 
+  @decode 
+  destroy ::= set {
     set {
       jid jid attribute
       password string element:cdata
@@ -88,7 +92,8 @@ targetNamespace http://jabber.org/protocol/muc#owner {
 targetNamespace http://jabber.org/protocol/muc#admin {
   name = admin
 
-  *query ::= set {
+  @decode
+  query ::= set {
     items sequence of item
   } element
 

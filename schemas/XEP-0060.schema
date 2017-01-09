@@ -3,7 +3,8 @@ category extension
 targetNamespace http://jabber.org/protocol/pubsub#event {
 name = event
 
-  *event ::= choice {
+  @decode
+  event ::= choice {
     collection
     configuration
     delete

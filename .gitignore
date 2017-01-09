@@ -1,0 +1,3 @@
+**/*.conf
+cmd/bot/bot
+cmd/generator/generator

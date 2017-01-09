@@ -1,7 +1,9 @@
 package time
 category extension
 targetNamespace urn:xmpp:time {
-  *time ::= set {
+
+  @decode
+  time ::= set {
     tz string element:cdata required
     utc string element:cdata required
   } element

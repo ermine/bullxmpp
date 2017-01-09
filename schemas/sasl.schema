@@ -2,28 +2,34 @@ package sasl
 category core
 targetNamespace urn:ietf:params:xml:ns:xmpp-sasl {
 
-  +mechanisms ::= set {
+  @decode client
+  mechanisms ::= set {
     mechanism sequence of string element:cdata
   } element
 
-  -auth ::= set {
+  @decode server
+  auth ::= set {
     mechanism string attribute required
     data bytestring cdata
   } element
-  
-  +success ::= set {
+ 
+  @decode client 
+  success ::= set {
     data bytestring cdata
   } element
-  
-  +challenge ::= set {
+ 
+  @decode 
+  challenge ::= set {
     data bytestring cdata
   } element
-  
-  -response ::= set {
+ 
+  @decode server 
+  response ::= set {
     data bytestring cdata
   } element
-  
-  +failure ::= set {
+ 
+  @decode client 
+  failure ::= set {
     text langstring element
     condition enum {
       aborted

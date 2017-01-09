@@ -192,7 +192,7 @@ func init() {
  xmlencoder.AddExtension(xml.Name{NS, "mechanisms"}, Mechanisms{}, true, false)
  xmlencoder.AddExtension(xml.Name{NS, "auth"}, Auth{}, false, true)
  xmlencoder.AddExtension(xml.Name{NS, "success"}, Success{}, true, false)
- xmlencoder.AddExtension(xml.Name{NS, "challenge"}, Challenge{}, true, false)
+ xmlencoder.AddExtension(xml.Name{NS, "challenge"}, Challenge{}, true, true)
  xmlencoder.AddExtension(xml.Name{NS, "response"}, Response{}, false, true)
  xmlencoder.AddExtension(xml.Name{NS, "failure"}, Failure{}, true, false)
 }

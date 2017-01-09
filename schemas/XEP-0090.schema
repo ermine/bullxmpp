@@ -2,7 +2,8 @@ package iqtime
 category extension
 targetNamespace jabber:iq:time {
 
-  *time ::= set {
+  @decode
+  time ::= set {
     utc string element:cdata required
     tz string element:cdata
     display string element:cdata

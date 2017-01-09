@@ -2,7 +2,8 @@ package stanza
 category core
 targetNamespace urn:ietf:params:xml:ns:xmpp-stanzas {
 
-  *error ::= set {
+  @decode
+  error ::= set {
     text langstring element
     condition set {
       name enum {

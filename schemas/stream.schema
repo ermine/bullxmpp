@@ -2,7 +2,8 @@ package stream
 category core
 targetNamespace stream http://etherx.jabber.org/streams {
 
-  *start ::= set {
+  @decode
+  start ::= set {
     to jid attribute
     from jid attribute
     id string attribute
@@ -10,9 +11,11 @@ targetNamespace stream http://etherx.jabber.org/streams {
     lang xmllang attribute
   } startelement(stream)
 
-  *features ::= sequence of extension element
-  
-  *error ::= set {
+  @decode client
+  features ::= sequence of extension element
+ 
+  @decode 
+  error ::= set {
     text langstring  element
     condition set {
       name enum {

@@ -16,11 +16,17 @@ type Target struct {
 
 type Field struct {
 	Name string
+	Parent *Field
 	Type interface{}
 	EncodingRule *Encoding
 	DefaultValue string
 	Required bool
-	Reciver_type string
+	Annotations []*Annotation
+}
+
+type Annotation struct {
+	Name string
+	Params []string
 }
 
 type Encoding struct {
@@ -45,4 +51,44 @@ type Enum []string
 type Extension struct {
 	Space string
 	Local string
+}
+
+func isForClient(field *Field) bool {
+	if field.Annotations == nil {
+		return false
+	}
+	for _, a := range field.Annotations {
+		if a.Name == "decode" {
+			if a.Params == nil || len(a.Params) == 0 {
+				return true
+			}
+			for  _, p := range a.Params {
+				if p == "client" {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return false
+}
+
+func isForServer(field *Field) bool {
+	if field.Annotations == nil {
+		return false
+	}
+	for _, a := range field.Annotations {
+		if a.Name == "decode" {
+			if a.Params == nil || len(a.Params) == 0 {
+				return true
+			}
+			for  _, p := range a.Params {
+				if p == "server" {
+					return true
+				}
+			}
+			return false
+		}
+	}
+	return false
 }

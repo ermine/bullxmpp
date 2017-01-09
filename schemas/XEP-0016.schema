@@ -2,7 +2,8 @@ package privacy
 category extension
 targetNamespace jabber:iq:privacy {
 
-  *privacy ::= set {
+  @decode
+  privacy ::= set {
      active
      default
      list sequence of list

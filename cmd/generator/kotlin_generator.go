@@ -6,9 +6,13 @@ import (
 	"unicode"
 	"fmt"
 	"errors"
+	"strings"
 )
 
 func KotlinGenerate() error {
+	kotlinSimpleTypes["jid"] = kotlinSimpleType{"JID", cfg.Kotlin.Package_prefix + ".jid.JID"}
+	kotlinSimpleTypes["langstring"] = kotlinSimpleType {"LangString", cfg.Kotlin.Package_prefix + ".xmlencoder.LangString"}
+	
 	if cfg.Kotlin.Outdir == "" {
 		panic("no outdir")
 	}
@@ -47,7 +51,7 @@ func KotlinGenerate() error {
 }
 
 func kotlin_generate_package(file *os.File, schema *Schema, target *Target) error {
-	file.WriteString("package " + cfg.Kotlin.Package_prefix + ".")
+	file.WriteString("package " + cfg.Kotlin.Package_prefix_data + ".")
 	if category, ok := schema.Props["category"]; ok && category == "extension" {
 		file.WriteString("extensions.")
 	}
@@ -61,8 +65,7 @@ func kotlin_generate_package(file *os.File, schema *Schema, target *Target) erro
 	for _, field := range target.Fields {
 		kotlin_getImports(target, field, &imports)
 	}
-	file.WriteString("import org.xmlpull.v1.XmlPullParser\n")
-	// file.WriteString("import org.xmlpull.v1.XmlPullParserException\n")
+	file.WriteString("import " + cfg.Kotlin.Package_prefix + ".xmlencoder.XmlParser\n")
 	file.WriteString("import org.xmlpull.v1.XmlSerializer\n")
 	file.WriteString("import " + cfg.Kotlin.Package_prefix + ".xmlencoder.XmlEncoder\n")
 	for _, i := range imports {
@@ -74,7 +77,7 @@ func kotlin_generate_package(file *os.File, schema *Schema, target *Target) erro
 	for _, field := range target.Fields {
 		switch typ := field.Type.(type) {
 		case Enum:
-			kotlin_generate_enum(file, typ, kotlin_makeEnumName(field.Name))
+			kotlin_generate_enum(file, typ, kotlin_makeEnumName(field))
 		default:
 			kotlin_generate_class(file, schema, target, field)
 		}
@@ -85,13 +88,23 @@ func kotlin_generate_package(file *os.File, schema *Schema, target *Target) erro
 
 func kotlin_generate_class(file *os.File, schema *Schema, target *Target, field *Field) {
 	file.WriteString("class " + kotlin_makeClassName(field.Name) + "() : XmlEncoder {\n")
+	if isForServer(field) && kotlin_field_hasChilds(field) {
+		file.WriteString("  constructor(")
+		kotlin_generate_variables(file, target, field)
+		file.WriteString(") : this() {\n")
+		kotlin_generate_assigns(file, target, field)
+		file.WriteString("  }\n\n")
+	}
+	
 	kotlin_generate_class_fields(file, target, field)
 	file.WriteString("\n")
 	// file.WriteString("  fun " + kotlin_makeClassName(field.Name) + "() {}\n")
 	// file.WriteString("\n\n")
 	kotlin_generate_encoder(file, target, field)
 	kotlin_generate_decoder(file, target, field)
-	file.WriteString("}\n")
+	kotlin_generate_iq(file, target, field)
+	file.WriteString("}\n\n")
+	kotlin_generate_enums(file, target, field)
 }
 
 func kotlin_normalize(s string) string {
@@ -139,14 +152,34 @@ func kotlin_makeIdent(prefix, s string) string {
 	case "var": s = "var_"
 	case "continue": s = "continue_"
 	}
-	return prefix + kotlin_normalize (s)
+	return prefix + kotlin_normalize (strings.ToLower(s))
 }
 
-func kotlin_makeEnumName(s string) string {
-	return kotlin_makeUppercase(s) + "Enum"
+func kotlin_makeEnumName(field *Field) string {
+	name := kotlin_makeUppercase(field.Name)
+	var parent *Field = field.Parent
+	for {
+		if parent == nil {
+			break
+		}
+		name = kotlin_makeUppercase(parent.Name) + name
+		parent = parent.Parent
+	}
+	return name
 }
 
 func kotlin_getImports(target *Target, field *Field, imports *[]string) {
+	if field.Annotations != nil {
+		for _, a := range field.Annotations {
+			if a.Name == "iq" {
+				cls, err := kotlin_getFullClassName("jabber:client", "iq")
+				if err != nil { panic(err) }
+				appendImport(imports, cls)
+				appendImport(imports, cfg.Kotlin.Package_prefix_data + ".client.IqType")
+			}
+		}
+	}
+	
 	switch typ := field.Type.(type) {
 	case string:
 		if data, ok := kotlinSimpleTypes[typ]; ok {
@@ -154,12 +187,22 @@ func kotlin_getImports(target *Target, field *Field, imports *[]string) {
 				appendImport(imports, data.Import)
 			}
 		}
+		if typ == "jid" {
+			appendImport(imports, cfg.Kotlin.Package_prefix + ".jid.toJID")
+		} else if typ == "datetime" {
+			appendImport(imports, cfg.Kotlin.Package_prefix + ".xmlencoder.toDateTime")
+		}			
 	case SequenceOf:
 		appendImport(imports, "java.util.ArrayList")
 		if data, ok := kotlinSimpleTypes[string(typ)]; ok {
 			if data.Import != "" {
 				appendImport(imports, data.Import)
 			}
+		}
+		if typ == "jid" {
+			appendImport(imports, cfg.Kotlin.Package_prefix + ".jid.toJID")
+		} else if typ == "datetime" {
+			appendImport(imports, cfg.Kotlin.Package_prefix + ".xmlencoder.toDateTime")
 		}
 		/*
 	case Extension:
@@ -172,7 +215,7 @@ func kotlin_getImports(target *Target, field *Field, imports *[]string) {
 							if (f.EncodingRule != nil && f.EncodingRule.Name == typ.Local) ||
 								(f.EncodingRule != nil && f.EncodingRule.Name == "" && f.Name == typ.Local) ||
 								(f.EncodingRule == nil && f.Name == typ.Local) {
-									pName := cfg.Kotlin.Package_prefix + "." + s.PackageName
+									pName := cfg.Kotlin.Package_prefix_data + "." + s.PackageName
 								if t.Name != "" {
 									pName += "." + t.Name
 								}
@@ -218,21 +261,21 @@ func appendImport(imports *[]string, i string) {
 }		
 */
 
-var kotlinSimpleTypes = map[string]struct{
+type kotlinSimpleType struct {
 	Type string
 	Import string
-}{
+}
+
+var kotlinSimpleTypes = map[string]kotlinSimpleType {
 	"boolean": {"Boolean", ""},
 	"string": {"String", ""},
 	"bytestring": {"String", ""},
-	//	"jid": {"JID", cfg.Kotlin.Package_prefix + ".jid.JID"},
-	"jid": {"JID", "ru.sulci.kotlin.xmpp.jid.JID"},
+	// "jid": {"JID", cfg.Kotlin.Package_prefix + ".jid.JID"},
 	"datetime": {"Date", "java.util.Date"},
 	"int": {"Int", ""},
 	"uint": {"Int", ""},
-	"xmllang": {"String", ""},
-//	"langstring": {"LangString", cfg.Kotlin.Package_prefix + ".xmlencoder.LangString"},
-	"langstring": {"LangString", "ru.sulci.kotlin.xmpp.xmlencoder.LangString"},
+	"xmllang": {"String", ""},	
+	// "langstring": {"LangString", cfg.Kotlin.Package_prefix + ".xmlencoder.LangString"},
 	"extension": {"XmlEncoder", ""},
 }
 
@@ -276,7 +319,7 @@ func kotlin_generate_class_fields(file *os.File, target *Target, field *Field) {
 	case Set:
 		fields := []*Field(typ)
 		for _, x := range fields {
-			kotlin_generate_field(file, "  ", target, "", x)
+			kotlin_generate_field(file, "  ", target,  "", x)
 		}
 	case Enum:
 	}
@@ -293,18 +336,18 @@ func kotlin_generate_field(file *os.File, ident string, target *Target, prefix s
 			if name == "" {
 				name = typ
 			}
-			is_enum := false
+			var is_enum *Field
 			for _, f := range target.Fields {
 				if typ == f.Name {
 					if _, ok := f.Type.(Enum); ok {
-						is_enum = true
+						is_enum = f
 						break
 					}
 				}
 			}
-			if is_enum {
+			if is_enum != nil {
 				file.WriteString(ident + "var " + kotlin_makeIdent(prefix, name) + ": " +
-					kotlin_makeClassName(typ) + "Enum? = null\n")
+					kotlin_makeEnumName(is_enum) + "? = null\n")
 			} else {
 				file.WriteString(ident + "var " + kotlin_makeIdent(prefix, name) + ": " +
 					kotlin_makeClassName(typ) + "? = null\n")
@@ -345,10 +388,10 @@ func kotlin_generate_field(file *os.File, ident string, target *Target, prefix s
 		}
 	case Enum:
 		file.WriteString(ident + "var "  + kotlin_makeIdent(prefix, field.Name) + ": " +
-			kotlin_makeEnumName(field.Name) + "? = null\n\n")
-		kotlin_generate_enum(file, typ, kotlin_makeEnumName(field.Name))
+			kotlin_makeEnumName(field) + "? = null\n\n")
 	case Choice:
-		file.WriteString(ident + "XmlEncoder " + kotlin_makeIdent(prefix, field.Name) + "\n")
+		file.WriteString(ident + "var " + kotlin_makeIdent(prefix, field.Name) +
+			": XmlEncoder? = null\n")
 	case Set:
 		fields := []*Field(typ)
 		for _, x := range fields {
@@ -373,18 +416,18 @@ func kotlin_generate_enum(file *os.File, enum Enum, name string) {
 	file.WriteString(";\n\n")
 	file.WriteString("    override fun toString() : String {\n")
 	if hashyphen {
-		file.WriteString("      return this.name().toLowerCase().replace('_', '-')\n")
+		file.WriteString("      return this.name.toLowerCase().replace('_', '-')\n")
 	} else {
-		file.WriteString("      return this.name().toLowerCase()\n")
+		file.WriteString("      return this.name.toLowerCase()\n")
 	}
 	file.WriteString("    }\n\n")
-	file.WriteString("  }\n\n")
+	file.WriteString("  }\n")
 		
-	file.WriteString("  fun " + name + ".valueOf(value: String) : " + name + " {\n")
+	file.WriteString("  fun String.to" + name + "() : " + name + " {\n")
 	if hashyphen {
-		file.WriteString("      return valueOf(value.toUpperCase().replace('-', '_'))\n")
+		file.WriteString("      return " + name + ".valueOf(this.toUpperCase().replace('-', '_'))\n")
 	} else {
-		file.WriteString("      return valueOf(value.toUpperCase())\n")
+		file.WriteString("      return " + name + ".valueOf(this.toUpperCase())\n")
 	}
 	file.WriteString("    }\n")
 	
@@ -423,7 +466,7 @@ func kotlin_getFullClassName(space, local string) (string, error) {
 				for _, field := range target.Fields {
 					_, alocal := c_getSpaceAndName(target, target.Space, field)
 					if  alocal == local {
-						pname := cfg.Kotlin.Package_prefix + "."
+						pname := cfg.Kotlin.Package_prefix_data + "."
 						if category, ok := schema.Props["category"]; ok && category == "extension" {
 							pname += "extensions."
 						}
@@ -451,7 +494,7 @@ func kotlin_getExtensionType(space, local string) string {
 					if (f.EncodingRule != nil && f.EncodingRule.Name == local) ||
 						(f.EncodingRule != nil && f.EncodingRule.Name == "" && f.Name == local) ||
 						(f.EncodingRule == nil && f.Name == local) {
-						pkgName := cfg.Kotlin.Package_prefix + "."
+						pkgName := cfg.Kotlin.Package_prefix_data + "."
 						if category, ok := s.Props["category"]; ok && category == "extension" {
 							pkgName += "extensions."
 						}
@@ -705,7 +748,7 @@ func kotlin_simplevalue(prefix string, field *Field) string {
 }
 
 func kotlin_generate_decoder(file *os.File, target *Target, field *Field) {
-	file.WriteString("  override fun decode(xp: XmlPullParser) {\n")
+	file.WriteString("  override fun decode(xp: XmlParser) {\n")
 	ident := "    "
 	prefix := ""
 	kotlin_generate_element_decoder(file, target, 0, false, false, ident, prefix, field)
@@ -718,20 +761,19 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 	if field.EncodingRule != nil {
 		switch field.EncodingRule.Type {
 		case "element:cdata":
-			file.WriteString(ident + "val _data_: String = " + cfg.Kotlin.Package_prefix + ".xmlencoder.getText(xp)\n")
 			if _, ok := field.Type.(SequenceOf); ok {
 				file.WriteString(ident + "if (" + kotlin_makeIdent(prefix, field.Name) + " == null)\n")
 				file.WriteString(ident + "  " + kotlin_makeIdent(prefix, field.Name) + " = ArrayList()\n")
-				file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + "!!.add(_data_)\n")
+				file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + "!!.add(xp.text)\n")
 			} else {
-				kotlin_simplevalue_decode(file, ident, prefix, "_data_", field)
+				kotlin_simplevalue_decode(file, ident, prefix, "xp.text", field)
 				// file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + " = data\n")
 			}
 		case "element:bool":
 			file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + " = true\n")
-			file.WriteString(ident + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+			file.WriteString(ident + "xp.getEndTag()\n")
 		case "element:name":
-			file.WriteString(ident + "String name = xp.getName()\n")
+			file.WriteString(ident + "String name = xp.name\n")
 			file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + "(name)\n")
 		case "startelement", "element":
 			if depth == 1 {
@@ -768,16 +810,16 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				file.WriteString(ident + "while (true) {\n")
 				forident := ident + "  "
 				file.WriteString(forident + "ev = xp.next()\n")
-				file.WriteString(forident + "if (ev == XmlPullParser.END_TAG) {\n")
+				file.WriteString(forident + "if (ev == org.xmlpull.v1.XmlPullParser.END_TAG) {\n")
 				file.WriteString(forident + "  break\n")
-				file.WriteString(forident + "} else if (ev == XmlPullParser.START_TAG) {\n")
+				file.WriteString(forident + "} else if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) {\n")
 				if typ.Local == "" {
 					file.WriteString(forident +
-						"payload = " + cfg.Kotlin.Package_prefix + ".xmlencoder.getExtension(xp.getNamespace(), xp.getName())\n")
+						"payload = " + cfg.Kotlin.Package_prefix_data + ".getExtension(xp.namespace, xp.name)\n")
 					file.WriteString("if (payload != null) {\n")
-					file.WriteString("payload.decode(xp)\n")
+				file.WriteString("payloadqй.decode(xp)\n")
 					file.WriteString("} else {\n")
-					file.WriteString(forident + "  " + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+					file.WriteString(forident + "  xp.getEndTag()\n")
 					file.WriteString(forident + "    }\n")
 				} else {
 					decoder, err := kotlin_getFullClassName(typ.Space, typ.Local)
@@ -787,7 +829,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				}
 				if typ.Local != "" {
 					file.WriteString(forident + "  } else {\n")
-					file.WriteString(forident + "    " + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+					file.WriteString(forident + "    xp.getEndTag()\n")
 					file.WriteString(forident + "  }\n")
 				}					
 				file.WriteString(forident + "}\n")
@@ -795,11 +837,12 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				file.WriteString(ident + "while (true) {\n")
 				forident := ident + "  "
 				file.WriteString(forident + "ev = xp.next()\n")
-				file.WriteString(forident + "if (ev == XmlPullParser.END_TAG) {\n")
+				file.WriteString(forident + "if (ev == org.xmlpull.v1.XmlPullParser.END_TAG) {\n")
 				file.WriteString(forident + "  break\n")
-				file.WriteString(forident + "} else if (ev == XmlPullParser.START_TAG) {\n")
+				file.WriteString(forident + "} else if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) {\n")
 				if string(typ) == "extension" {
-					file.WriteString(forident + "val obj: XmlEncoder? = " + cfg.Kotlin.Package_prefix + ".xmlencoder.getExtension(xp.getNamespace(), xp.getName())\n")
+					file.WriteString(forident + "val obj: XmlEncoder? = " + cfg.Kotlin.Package_prefix_data +
+						".getExtension(xp.namespace, xp.name)\n")
 					file.WriteString(forident + "if (obj != null) {\n")
 				} else {
 					var tname string
@@ -819,7 +862,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 						}
 					}
 					local = "\"" + local + "\""
-					file.WriteString(forident + "if (xp.getNamespace() == " + space + " && xp.getName() == " +
+					file.WriteString(forident + "if (xp.namespace == " + space + " && xp.name == " +
 						local + ") {\n")
 					file.WriteString(forident + "  val obj: " + tname + " = " + tname + "()\n")
 				}
@@ -837,7 +880,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				file.WriteString(name + " = ArrayList()\n")
 				file.WriteString(forident + name + "?.add(obj)\n")
 				file.WriteString(forident + "} else {\n")
-				file.WriteString(forident + "  " + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+				file.WriteString(forident + "xp.getEndTag()\n")
 				file.WriteString(forident + "  }\n")
 				file.WriteString(forident + "}\n")
 				file.WriteString(ident + "}\n")
@@ -845,9 +888,9 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				file.WriteString(ident + "while (true) {\n")
 				forident := ident + "  "
 				file.WriteString(forident + "ev = xp.next()\n")
-				file.WriteString(forident + "if (ev == XmlPullParser.END_TAG) {\n")
+				file.WriteString(forident + "if (ev == org.xmlpull.v1.XmlPullParser.END_TAG) {\n")
 				file.WriteString(forident + "  break\n")
-				file.WriteString(forident + "} else if (ev == XmlPullParser.START_TAG) {\n")
+				file.WriteString(forident + "} else if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) {\n")
 				fields := []*Field(typ)
 				for _, x := range fields {
 					name := x.Type.(string)
@@ -867,7 +910,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 					} else {
 						file.WriteString(forident + "  } else ")
 					}
-					file.WriteString("if (xp.getNamespace() == " + space + " && xp.getName() == " +
+					file.WriteString("if (xp.namespace == " + space + " && xp.name == " +
 						local + ") {\n")
 					file.WriteString(forident + "    val obj: " + kotlin_makeClassName(name) + " = " +
 						kotlin_makeClassName(name) + "()\n")
@@ -889,9 +932,9 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				file.WriteString(ident + "while (true) {\n")
 				forident := ident + "  "
 				file.WriteString(forident + "ev = xp.next()\n")
-				file.WriteString(forident + "if (ev == XmlPullParser.END_TAG) {\n")
+				file.WriteString(forident + "if (ev == org.xmlpull.v1.XmlPullParser.END_TAG) {\n")
 				file.WriteString(forident + "  break\n")
-				file.WriteString(forident + "} else if (ev == XmlPullParser.START_TAG) {\n")
+				file.WriteString(forident + "} else if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) {\n")
 				fields := []*Field(typ)
 				elseif := false
 				for _, x := range fields {
@@ -912,7 +955,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 					} else {
 						file.WriteString(forident + "  } else ")
 					}
-					file.WriteString("if (xp.getNamespace() == " + space + " && xp.getName() == " +
+					file.WriteString("if (xp.namespace == " + space + " && xp.name == " +
 						local + ") {\n")
 					file.WriteString(forident + "    val obj: " + kotlin_makeClassName(name) + " = " +
 						kotlin_makeClassName(name) + "()\n")
@@ -929,7 +972,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 			case Set:
 				fields := []*Field(typ)
 				if len(fields) == 0 {
-					file.WriteString(ident + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+					file.WriteString(ident + "xp.getEndTag()\n")
 					return 
 				}
 				if depth > 1 {
@@ -986,15 +1029,15 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 					}
 				}
 				if anyname != nil {
-					file.WriteString(ident + kotlin_makeIdent(prefix, anyname.Name) + " = " +
-						kotlin_makeEnumName(anyname.Name) + ".valueOf(xp.getName())\n")
+					file.WriteString(ident + kotlin_makeIdent(prefix, anyname.Name) + " = xp.name.to" +
+						kotlin_makeEnumName(anyname) + "()\n")
 				}
 				if len(elems) > 0 || any != nil || extension != nil {
 					file.WriteString(ident + "while (true) {\n")
 					file.WriteString(ident + "  ev = xp.next()\n")
-					file.WriteString(ident + "  if (ev == XmlPullParser.END_TAG) {\n")
+					file.WriteString(ident + "  if (ev == org.xmlpull.v1.XmlPullParser.END_TAG) {\n")
 					file.WriteString(ident + "    break\n")
-					file.WriteString(ident + "  } else if (ev == XmlPullParser.START_TAG) {\n")
+					file.WriteString(ident + "  } else if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) {\n")
 					forident := ident + "  "
 					elseif := false
 					for _, z := range elems {
@@ -1014,8 +1057,8 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 							} else {
 								file.WriteString(forident + "  } else ")
 							}
-							file.WriteString("if (xp.getNamespace() == " + space +
-								" && xp.getName() == " + local + ") {\n")
+							file.WriteString("if (xp.namespace == " + space +
+								" && xp.name == " + local + ") {\n")
 							kotlin_generate_element_decoder(file, target, depth, elseif, decl,
 								forident + "    ", prefix, z)
 						} else {
@@ -1031,30 +1074,30 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 						if elseif {
 							file.WriteString(" } else ")
 						}
-						file.WriteString("if (xp.getNamespace() == " + kotlin_ns(target) + ") {\n")
+						file.WriteString("if (xp.namespace == " + kotlin_ns(target) + ") {\n")
 						switch any.EncodingRule.Type {
 						case "element:name":
 							var typ string
 							if t, ok := any.Type.(string); ok {
-								is_enum := false
+								var is_enum *Field
 								for _, f := range target.Fields {
 									if t == f.Name {
 										if _, ok := f.Type.(Enum); ok {
-											is_enum = true
+											is_enum = f
 										}
 										break
 									}
 								}
-								if is_enum {
-									typ = kotlin_makeEnumName(t)
+								if is_enum != nil {
+									typ = kotlin_makeEnumName(is_enum)
 								} else {
 									typ = kotlin_makeClassName(t)
 								}
 							} else {
-								typ = kotlin_makeEnumName(any.Name)
+								typ = kotlin_makeEnumName(any)
 							}
-							file.WriteString("  " + kotlin_makeIdent(prefix, any.Name) + " = " +
-								typ + ".valueOf(xp.getName())\n")
+							file.WriteString("  " + kotlin_makeIdent(prefix, any.Name) + " = xp.name.to" + 
+								typ + "()\n")
 						case "name":
 							file.WriteString("not implemented\n")
 						case "element":
@@ -1067,23 +1110,21 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 						if elseif {
 							file.WriteString("} else ")
 						}
-						file.WriteString("if (xp.getNamespace() != " + kotlin_ns(target) + ") {\n")
+						file.WriteString("if (xp.namespace != " + kotlin_ns(target) + ") {\n")
 						kotlin_generate_element_decoder(file, target, depth, elseif, decl,
 								forident + "    ", prefix, extension)
 						elseif = true
 					}
 					if len(elems) > 0 || any != nil || extension != nil {
 						file.WriteString(forident + "  } else {\n")
-						file.WriteString(forident + "    " + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+						file.WriteString(forident + "    xp.getEndTag()\n")
 						file.WriteString(forident + "  }\n")
 					}
 					file.WriteString(ident + "  }\n")
 					file.WriteString(ident + "}\n")
 				}
 				if cdata != nil {
-					file.WriteString(ident + "val _data_: String = " +
-						cfg.Kotlin.Package_prefix + ".xmlencoder.getText(xp)\n")
-					kotlin_simplevalue_decode(file, ident, prefix, "_data_", cdata)
+					kotlin_simplevalue_decode(file, ident, prefix, "xp.text", cdata)
 				}
 			}
 		}
@@ -1108,7 +1149,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 			if elseif {
 				file.WriteString("} else ")
 			}
-			file.WriteString("if (xp.getNamespace() == " + space + " && xp.getName() == " +
+			file.WriteString("if (xp.namespace == " + space + " && xp.name == " +
 				local + ") {\n")
 			file.WriteString(ident + "  " + kotlin_makeIdent(prefix, name) + " = " +
 				kotlin_makeClassName(typ) + "()\n")
@@ -1116,14 +1157,15 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 		case SequenceOf:
 			if string(typ) == "extension" {
 				file.WriteString(ident +
-					"val xe: XmlEncoder? = " + cfg.Kotlin.Package_prefix + ".xmlencoder.getExtension(xp.getNamespace(), xp.getName())\n")
+					"val xe: XmlEncoder? = " + cfg.Kotlin.Package_prefix_data +
+					".getExtension(xp.namespace, xp.name)\n")
 				file.WriteString(ident + "if (xe != null) {\n")
 				file.WriteString(ident + "  xe.decode(xp)\n")
 				file.WriteString("if (" + kotlin_makeIdent(prefix, field.Name) + " == null)\n")
 				file.WriteString(kotlin_makeIdent(prefix, field.Name) + " = ArrayList()\n")
 				file.WriteString(ident + "  " + kotlin_makeIdent(prefix, field.Name) + "?.add(xe)\n")
 				file.WriteString(ident + "} else {\n")
-				file.WriteString(ident + "  " + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+				file.WriteString(ident + "  xp.getEndTag()\n")
 				file.WriteString(ident + "}\n")
 			} else {
 				f := kotlin_getFieldByName(target, string(typ))
@@ -1140,7 +1182,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				if elseif {
 					file.WriteString("} else ")
 				}
-				file.WriteString("if (xp.getNamespace() == " + space + " && xp.getName() == " +
+				file.WriteString("if (xp.namespace == " + space + " && xp.name == " +
 					local + ") {\n")
 				file.WriteString(ident + "  val obj: " + kotlin_makeClassName(string(typ)) + " = " +
 					kotlin_makeClassName(string(typ)) + "()\n")
@@ -1151,12 +1193,13 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 			}
 		case Extension:
 			if typ.Local == "" {
-				file.WriteString(ident + "val xe: XmlEncoder? = " + cfg.Kotlin.Package_prefix + ".xmlencoder.getExtension(xp.getNamespace(), xp.getName())\n")
+				file.WriteString(ident + "val xe: XmlEncoder? = " + cfg.Kotlin.Package_prefix_data + 
+					".getExtension(xp.namespace, xp.name)\n")
 				file.WriteString(ident + "if (xe != null) {\n")
 				file.WriteString(ident + "  xe.decode(xp)\n")
 				file.WriteString(ident + "  " + kotlin_makeIdent(prefix, field.Name) + " = xe\n")
 				file.WriteString(ident + "} else {\n")
-				file.WriteString(ident + "  " + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+				file.WriteString(ident + "  xp.getEndTag()\n")
 				file.WriteString(ident  + "}\n")
 			} else {
 				file.WriteString(ident)
@@ -1165,16 +1208,17 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				}
 				space := "\"" + typ.Space + "\""
 				local := "\"" + typ.Local + "\""
-				file.WriteString("if (xp.getNamespace() == " + space + " && xp.getName() == " +
+				file.WriteString("if (xp.namespace == " + space + " && xp.name == " +
 					local + ") {\n")
-				file.WriteString(ident + "  val xe: XmlEncoder? = " + cfg.Kotlin.Package_prefix + ".xmlencoder.getExtension(" +
+				file.WriteString(ident + "  val xe: XmlEncoder? = " + cfg.Kotlin.Package_prefix_data + 
+					".getExtension(" +
 					space + ", " + local + ")\n")
 				file.WriteString(ident + "  if (xe != null && xe is " +
 					kotlin_getExtensionType(typ.Space, typ.Local) + ") {\n")
 				file.WriteString(ident + "    xe.decode(xp)\n")
 					file.WriteString(ident + "    " + kotlin_makeIdent(prefix, field.Name) + " = xe\n")
 				file.WriteString(ident + "  } else {\n")
-				file.WriteString(ident + "    " + cfg.Kotlin.Package_prefix + ".xmlencoder.getEndTag(xp)\n")
+				file.WriteString(ident + "    xp.getEndTag()\n")
 				file.WriteString(ident  + "  }\n")
 			}
 		case Sequence:
@@ -1197,7 +1241,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				if elseif {
 					file.WriteString("} else ")
 				}
-				file.WriteString("if (xp.getNamespace() == " + space + " && xp.getName() == " +
+				file.WriteString("if (xp.namespace == " + space + " && xp.name == " +
 					local + ") {\n")
 				file.WriteString(ident + "  val obj: " + kotlin_makeClassName(f.Name) + " = " +
 					kotlin_makeClassName(f.Name) + "()\n")
@@ -1223,7 +1267,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				if elseif {
 					file.WriteString("} else ")
 				}
-				file.WriteString("if (xp.getNamespace() == " + space + " && xp.getName() == " +
+				file.WriteString("if (xp.namespace == " + space + " && xp.name == " +
 					local + ") {\n")
 				file.WriteString(ident + "  val obj: " + kotlin_makeClassName(f.Name) + " = " +
 					kotlin_makeClassName(f.Name) + "()\n")
@@ -1253,7 +1297,7 @@ func kotlin_generate_element_decoder(file *os.File, target *Target, depth int, e
 				if elseif {
 					file.WriteString("} else ")
 				}
-				file.WriteString("if (xp.getNamespace() == " + space + " && xp.getName() == " +
+				file.WriteString("if (xp.namespace == " + space + " && xp.name == " +
 					local + ") {\n")
 				kotlin_generate_element_decoder(file, target, depth, elseif, decl,
 					ident + "    ", prefix + kotlin_makeClassName(field.Name), x)
@@ -1296,7 +1340,7 @@ func kotlin_generate_attributes_decoder(file *os.File, decl bool, ident, prefix 
 		}
 	}
 	if hasAttrs && !decl {
-		file.WriteString(ident + "var _value_: String\n")
+		file.WriteString(ident + "var _value_: String?\n")
 	}
 	for _, x := range fields {
 		if x.EncodingRule != nil && x.EncodingRule.Type == "attribute" {
@@ -1316,7 +1360,7 @@ func kotlin_generate_attributes_decoder(file *os.File, decl bool, ident, prefix 
 			local = "\"" + local + "\""
 			
 			file.WriteString(ident + "_value_ = xp.getAttributeValue(" + space + ", " + local + ")\n")
-			file.WriteString("if (_value_ != null)\n")
+//			file.WriteString("if (_value_ != null)\n")
 			kotlin_simplevalue_decode(file, ident + "  ", prefix, "_value_", x)
 		}
 	}
@@ -1324,47 +1368,50 @@ func kotlin_generate_attributes_decoder(file *os.File, decl bool, ident, prefix 
 }
 
 func kotlin_simplevalue_decode(file *os.File, ident, prefix, varname string, field *Field) {
+	specname := varname
+	if varname != "xp.text" {
+		specname += "?"
+	}
 	switch typ := field.Type.(type) {
 	case string:
 		switch typ {
 		case "boolean":
-			file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + " = " + varname +
+			file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + " = " + specname +
 				".toBoolean()\n")
 			return
 		case "int", "uint":
 			file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) +
-				" = " + varname + ".toInt()\n")
+				" = " + specname + ".toInt()\n")
 			return
 		case "bytestring", "string", "xmllang":
 			file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + " = " + varname + "\n")
 			return
 		case "jid":
-			file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + " = JID(" + varname + ")\n")
+			file.WriteString(ident + kotlin_makeIdent(prefix, field.Name) + " = " +
+				specname + ".toJID()\n")
 			return
 		case "datetime":
-			file.WriteString(ident + "try {\n")
 			file.WriteString(ident + "  " + kotlin_makeIdent(prefix, field.Name) +
-				" = " + cfg.Kotlin.Package_prefix + ".xmlencoder.parseRFC3339(" + varname + ")\n")
-			file.WriteString(ident + "} catch (e: java.text.ParseException) {}\n")
+				" = " + specname + ".toDateTime()\n")
 			return
 		}
 	case Enum:
-		file.WriteString(ident + "try {\n")
-		file.WriteString(ident + "  " + kotlin_makeIdent(prefix, field.Name) + " = " +
-			kotlin_makeEnumName(field.Name) + ".valueOf(" + varname + ")\n")
-		file.WriteString(ident + "} catch (iae: IllegalArgumentException) {}\n")
+		file.WriteString(ident + "  " + kotlin_makeIdent(prefix, field.Name) + " = " + specname +
+			".to" + kotlin_makeEnumName(field) + "()\n")
 		return
 	}
 	file.WriteString("not implemented\n")
 }
 
 func kotlin_generate_adders() error {
-	filename := filepath.Join(cfg.Kotlin.Outdir, "xmlencoder", "extensions.kt")
+	filename := filepath.Join(cfg.Kotlin.Outdir, "extensions.kt")
 	file, err := os.Create(filename)
 	if err != nil { return err }
-	file.WriteString("package " + cfg.Kotlin.Package_prefix + ".xmlencoder\n\n")
+	file.WriteString("package " + cfg.Kotlin.Package_prefix_data + "\n\n")
 	file.WriteString("import org.xmlpull.v1.XmlPullParser\n")
-	file.WriteString("import " + cfg.Kotlin.Package_prefix + ".xmlencoder.QName\n\n")
+	/gradle
+	file.WriteString("import " + cfg.Kotlin.Package_prefix + ".xmlencoder.QName\n")
+	file.WriteString("import " + cfg.Kotlin.Package_prefix + ".xmlencoder.XmlEncoder\n\n")
 	
 //	file.WriteString("val extensions = object {\n")
 	//	file.WriteString("  val mapData: Map<QName, (() -> XmlEncoder)>\n\n")
@@ -1379,7 +1426,7 @@ func kotlin_generate_adders() error {
 		}
 		for _, target := range schema.Targets {
 			for _, field := range target.Fields {
-				if field.Reciver_type != "" {
+				if isForClient(field) {
 					local := field.Name
 					if field.EncodingRule != nil && field.EncodingRule.Name != "" {
 						local = field.EncodingRule.Name
@@ -1389,7 +1436,7 @@ func kotlin_generate_adders() error {
 					}
 					first = true
 					file.WriteString("    QName(\"" + target.Space + "\", \"" + local + "\") to ")
-					file.WriteString("{ " + cfg.Kotlin.Package_prefix + ".")
+					file.WriteString("{ " + cfg.Kotlin.Package_prefix_data + ".")
 					if category == "extension" {
 						file.WriteString("extensions.")
 					}
@@ -1421,3 +1468,366 @@ func kotlin_ns(target *Target) string {
 	}
 	return "ns"
 }
+
+func kotlin_generate_iq(file *os.File, target *Target, field *Field) {
+	var annotation *Annotation
+	for _, a := range field.Annotations {
+		if a.Name == "iq" {
+			annotation = a
+			break
+		}
+	}
+	if annotation == nil {
+		return
+	}
+	file.WriteString("companion object {\n")
+
+	for _, param := range annotation.Params {
+		switch param {
+		case "get":
+			file.WriteString("fun  iqGet(")
+			kotlin_generate_variables(file, target, field) 
+			file.WriteString(") : Iq {\n")
+			file.WriteString("val iq = Iq()\n")
+			file.WriteString("iq.type = IqType.GET\n")
+			file.WriteString("iq.payload = " + kotlin_makeClassName(field.Name) + "(")
+			kotlin_generate_arguments(file, target, field)
+			file.WriteString(")\n")
+			file.WriteString("return iq\n")
+			file.WriteString("}\n\n")
+		case "get:empty":
+			file.WriteString("fun iqGet() : Iq {\n")
+			file.WriteString("val iq = Iq()\n")
+			file.WriteString("iq.type = IqType.GET\n")
+			file.WriteString("iq.payload = " + kotlin_makeClassName(field.Name) + "()\n")
+			file.WriteString("return iq\n")
+			file.WriteString("}\n\n")
+		case "set":
+			file.WriteString("fun iqSet(")
+			kotlin_generate_variables(file, target, field) 
+			file.WriteString(") : Iq {\n")
+			file.WriteString("val iq = Iq()\n")
+			file.WriteString("iq.type = IqType.SET\n")
+			file.WriteString("iq.payload = " + kotlin_makeClassName(field.Name) + "(")
+			kotlin_generate_arguments(file, target, field)
+			file.WriteString(")\n")
+			file.WriteString("return iq\n")
+			file.WriteString("}\n\n")
+		case "set:empty":
+			file.WriteString("fun iqSet() : Iq {\n")
+			file.WriteString("val iq = Iq()\n")
+			file.WriteString("iq.type = IqType.SET\n")
+			file.WriteString("iq.payload = " + kotlin_makeClassName(field.Name) + "()\n")
+			file.WriteString("return iq\n")
+			file.WriteString("}\n\n")
+		case "result":
+			file.WriteString("fun iqResult(")
+			kotlin_generate_variables(file, target, field)
+			file.WriteString(") : Iq {\n")
+			file.WriteString("val iq = Iq()\n")
+			file.WriteString("iq.type = IqType.RESULT\n")
+			file.WriteString("iq.payload = " + kotlin_makeClassName(field.Name) + "(")
+			kotlin_generate_arguments(file, target, field)
+			file.WriteString(")\n")
+			file.WriteString("return iq\n")
+			file.WriteString("}\n\n")
+		case "result:empty":
+			file.WriteString("fun iqResult() : Iq {\n")
+			file.WriteString("val iq = Iq()\n")
+			file.WriteString("iq.type = IqType.RESULT\n")
+			file.WriteString("return iq\n")
+			file.WriteString("}\n\n")
+		default:
+			fmt.Printf("annotation for %s iq: unknown param %s\n", field.Name, param)
+		}
+	}
+	file.WriteString("}\n")
+}
+
+func kotlin_generate_variables(file *os.File, target *Target, field *Field) {
+	prefix := ""
+	required := "?"
+	if field.Required {
+		required = ""
+	}
+	switch typ := field.Type.(type) {
+	case string:
+		if t, ok := kotlinSimpleTypes[typ]; ok {
+			file.WriteString(kotlin_makeIdent(prefix, field.Name) + ": " + t.Type + required)
+		} else {
+			name := field.Name
+			if name == "" {
+				name = typ
+			}
+			file.WriteString(kotlin_makeIdent(prefix, name) + ": " + kotlin_makeClassName(typ) + required)
+		}
+	case Extension:
+		if typ.Local == "" {
+			file.WriteString("payload: XmlEncoder" + required)
+		} else {
+			t := kotlin_getExtensionType(typ.Space, typ.Local)
+			file.WriteString("payload: " + t + required)
+		}
+	case SequenceOf:
+		t := string(typ)
+		tt := "XmlEncoder"
+		if t != "extension" {
+			if s, ok := kotlinSimpleTypes[t]; ok {
+				tt = s.Type
+			} else {
+				tt = kotlin_makeClassName(t)
+			}
+		}
+		file.WriteString("payloadSequence: ArrayList<" + tt + ">" + required)
+	case Sequence:
+		file.WriteString("payloadSequence: ArrayList<XmlEncoder>" + required)
+	case Choice:
+		file.WriteString("payload: XmlEncoder" + required)
+	case Set:
+		fields := []*Field(typ)
+		for i, x := range fields {
+			if i > 0 {
+				file.WriteString(", ")
+			}
+			kotlin_generate_variable(file, target,  "", x)
+		}
+	case Enum:
+	}
+}
+
+func kotlin_generate_variable(file *os.File, target *Target, prefix string, field *Field) {
+	required := "?"
+	if field.Required {
+		required = ""
+	}
+	switch typ := field.Type.(type) {
+	case string:
+		if t, ok := kotlinSimpleTypes[typ]; ok {
+			file.WriteString(kotlin_makeIdent(prefix, field.Name) + ": " + t.Type + required)
+		} else {
+			name := field.Name
+			if name == "" {
+				name = typ
+			}
+			var is_enum *Field
+			for _, f := range target.Fields {
+				if typ == f.Name {
+					if _, ok := f.Type.(Enum); ok {
+						is_enum = f
+						break
+					}
+				}
+			}
+			if is_enum != nil {
+				file.WriteString(kotlin_makeIdent(prefix, name) + ": " +
+					kotlin_makeEnumName(is_enum) + required)
+			} else {
+				file.WriteString(kotlin_makeIdent(prefix, name) + ": " +
+					kotlin_makeClassName(typ) + required)
+			}
+		}
+	case Extension:
+		var t string
+		if typ.Local == "" {
+			t = "XmlEncoder"
+		} else {
+			t = kotlin_getExtensionType(typ.Space, typ.Local)
+		}			
+		file.WriteString(kotlin_makeIdent(prefix, field.Name) + ": " + t + required)
+	case SequenceOf:
+		t := string(typ)
+		tt := "XmlEncoder"
+		if t != "extension" {
+			if s, ok := kotlinSimpleTypes[t]; ok {
+				tt = s.Type
+			} else {
+				tt = kotlin_makeClassName(t)
+			}
+		}
+		file.WriteString(kotlin_makeIdent(prefix, field.Name) + ": ArrayList<" + tt + ">" + required)
+	case Sequence:
+		file.WriteString(kotlin_makeIdent(prefix, field.Name) +
+			": ArrayList<XmlEncoder>" + required)
+	case Enum:
+		file.WriteString(kotlin_makeIdent(prefix, field.Name) + ": " + kotlin_makeEnumName(field) +
+			required)
+	case Choice:
+		file.WriteString(kotlin_makeIdent(prefix, field.Name) + ": XmlEncoder" + required)
+	case Set:
+		fields := []*Field(typ)
+		for i, x := range fields {
+			if i > 0 {
+				file.WriteString(", ")
+			}
+			kotlin_generate_variable(file, target, kotlin_makeClassName(field.Name), x)
+		}
+	}
+}
+
+func kotlin_generate_enums(file *os.File, target *Target, field *Field) {
+	switch typ := field.Type.(type) {
+	case Set:
+		fields := []*Field(typ)
+		for _, x := range fields {
+			kotlin_generate_enums_field(file, "  ", target, x)
+		}
+	case Enum:
+	}
+}
+
+func kotlin_generate_enums_field(file *os.File, ident string, target *Target, field *Field) {
+	switch typ := field.Type.(type) {
+	case Enum:
+		kotlin_generate_enum(file, typ, kotlin_makeEnumName(field))
+	case Set:
+		fields := []*Field(typ)
+		for _, x := range fields {
+			kotlin_generate_enums_field(file, ident, target, x)
+		}
+	}
+}
+
+func kotlin_field_hasChilds(field *Field) bool {
+	if fields, ok := field.Type.(Set); ok {
+		if len([]*Field(fields)) == 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func kotlin_generate_assigns(file *os.File, target *Target, field *Field) {
+	prefix := ""
+	switch typ := field.Type.(type) {
+	case string:
+		if _, ok := kotlinSimpleTypes[typ]; ok {
+			file.WriteString("this." + kotlin_makeIdent(prefix, field.Name) + " = " +
+				kotlin_makeIdent(prefix, field.Name) + "\n")
+		} else {
+			name := field.Name
+			if name == "" {
+				name = typ
+			}
+			file.WriteString("this." + kotlin_makeIdent(prefix, name) + " = " +
+				kotlin_makeIdent(prefix, name) + "\n")
+		}
+	case Extension:
+		file.WriteString("this.payload = payload\n")
+	case SequenceOf:
+		file.WriteString("this.payloadSequence = payloadSequence\n")
+	case Sequence:
+		file.WriteString("this.payloadSequence = payloadSequence\n")
+	case Choice:
+		file.WriteString("this.payload =  payload\n")
+	case Set:
+		fields := []*Field(typ)
+		for _, x := range fields {
+			kotlin_generate_assign(file, target,  "", x)
+		}
+	}
+}
+	
+func kotlin_generate_assign(file *os.File, target *Target, prefix string, field *Field) {
+	switch typ := field.Type.(type) {
+	case string:
+		if _, ok := kotlinSimpleTypes[typ]; ok {
+			file.WriteString("this." + kotlin_makeIdent(prefix, field.Name) + " = " +
+				kotlin_makeIdent(prefix, field.Name) + "\n")
+		} else {
+			name := field.Name
+			if name == "" {
+				name = typ
+			}
+			file.WriteString("this." + kotlin_makeIdent(prefix, name) + " = " +
+				kotlin_makeIdent(prefix, name) + "\n")
+		}
+	case Extension:
+		file.WriteString("this." + kotlin_makeIdent(prefix, field.Name) + " = " +
+			kotlin_makeIdent(prefix, field.Name) + "\n")
+	case SequenceOf:
+		file.WriteString("this." + kotlin_makeIdent(prefix, field.Name) + " = " +
+			kotlin_makeIdent(prefix, field.Name) + "\n")
+	case Sequence:
+		file.WriteString("this." + kotlin_makeIdent(prefix, field.Name) + " = " +
+			kotlin_makeIdent(prefix, field.Name) + "\n")
+	case Enum:
+		file.WriteString("this." + kotlin_makeIdent(prefix, field.Name) + " = " +
+			kotlin_makeIdent(prefix, field.Name) + "\n")
+	case Choice:
+		file.WriteString("this." + kotlin_makeIdent(prefix, field.Name) + " = " +
+			kotlin_makeIdent(prefix, field.Name)  + "\n")
+	case Set:
+		fields := []*Field(typ)
+		for _, x := range fields {
+			kotlin_generate_assign(file, target, kotlin_makeClassName(field.Name), x)
+		}
+	}
+}
+
+
+func kotlin_generate_arguments(file *os.File, target *Target, field *Field) {
+	prefix := ""
+	switch typ := field.Type.(type) {
+	case string:
+		if _, ok := kotlinSimpleTypes[typ]; ok {
+			file.WriteString(kotlin_makeIdent(prefix, field.Name))
+		} else {
+			name := field.Name
+			if name == "" {
+				name = typ
+			}
+			file.WriteString(kotlin_makeIdent(prefix, name))
+		}
+	case Extension:
+		file.WriteString("payload")
+	case SequenceOf:
+		file.WriteString("payloadSequence")
+	case Sequence:
+		file.WriteString("payloadSequence")
+	case Choice:
+		file.WriteString("payload")
+	case Set:
+		fields := []*Field(typ)
+		for i, x := range fields {
+			if i > 0 {
+				file.WriteString(", ")
+			}
+			kotlin_generate_argument(file, target,  "", x)
+		}
+	}
+}
+	
+func kotlin_generate_argument(file *os.File, target *Target, prefix string, field *Field) {
+	switch typ := field.Type.(type) {
+	case string:
+		if _, ok := kotlinSimpleTypes[typ]; ok {
+			file.WriteString(kotlin_makeIdent(prefix, field.Name))
+		} else {
+			name := field.Name
+			if name == "" {
+				name = typ
+			}
+			file.WriteString(kotlin_makeIdent(prefix, name))
+		}
+	case Extension:
+		file.WriteString(kotlin_makeIdent(prefix, field.Name))
+	case SequenceOf:
+		file.WriteString(kotlin_makeIdent(prefix, field.Name))
+	case Sequence:
+		file.WriteString(kotlin_makeIdent(prefix, field.Name))
+	case Enum:
+		file.WriteString(kotlin_makeIdent(prefix, field.Name))
+	case Choice:
+		file.WriteString(kotlin_makeIdent(prefix, field.Name))
+	case Set:
+		fields := []*Field(typ)
+		for i, x := range fields {
+			if i > 0 {
+				file.WriteString(", ")
+			}
+			kotlin_generate_argument(file, target, kotlin_makeClassName(field.Name), x)
+		}
+	}
+}
+
+		

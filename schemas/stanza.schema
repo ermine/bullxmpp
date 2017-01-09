@@ -2,7 +2,8 @@ package client
 category core
 targetNamespace jabber:client {
 
-  *iq ::= set {
+  @decode
+  iq ::= set {
     from jid attribute
     to jid attribute
     id string attribute required
@@ -17,7 +18,8 @@ targetNamespace jabber:client {
     error extension(urn:ietf:params:xml:ns:xmpp-stanzas error)
   } element
 
-  *presence ::= set {
+  @decode
+  presence ::= set {
     from jid attribute
     to jid attribute
     id string attribute
@@ -41,7 +43,8 @@ targetNamespace jabber:client {
     error extension(urn:ietf:params:xml:ns:xmpp-stanzas error)
   } element
 
-  *message ::= set {
+  @decode
+  message ::= set {
     from jid attribute
     to jid attribute
     id string attribute

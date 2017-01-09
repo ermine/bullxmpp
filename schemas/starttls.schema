@@ -2,10 +2,14 @@ package starttls
 category core
 targetNamespace urn:ietf:params:xml:ns:xmpp-tls {
 
-  *starttls ::= set {
+  @decode
+  starttls ::= set {
     required boolean element:bool
   } element
 
-  +proceed ::= set {} element
-  +failure ::= set {} element
+  @decode client
+  proceed ::= set {} element
+
+  @decode client
+  failure ::= set {} element
 }

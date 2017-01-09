@@ -2,7 +2,8 @@ package stats
 category extension
 targetNamespace http://jabber.org/protocol/stats {
 
-  *stats ::= sequence of stat element(query)
+  @decode
+  stats ::= sequence of stat element(query)
 
   stat ::= set {
     name string attribute

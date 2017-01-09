@@ -77,7 +77,7 @@ func java_generate_class(file *os.File, schema *Schema, target *Target, field *F
 	file.WriteString("\n")
 	file.WriteString("public class " + java_makeClassName(field.Name) +
 		" implements XmlEncoder {\n")
-	if field.Reciver_type != "" {
+	if isForClient(field) || isForServer(field) {
 		file.WriteString("  public static final String NS = \"" + target.Space + "\";\n\n")
 	} else {
 		file.WriteString("  private static final String NS = \"" + target.Space + "\";\n\n")
@@ -1324,7 +1324,7 @@ func java_generate_adders() error {
 		}
 		for _, target := range schema.Targets {
 			for _, field := range target.Fields {
-				if field.Reciver_type != "" {
+				if isForClient(field) || isForServer(field) {
 					local := field.Name
 					if field.EncodingRule != nil && field.EncodingRule.Name != "" {
 						local = field.EncodingRule.Name
@@ -1339,12 +1339,12 @@ func java_generate_adders() error {
 						file.WriteString(target.Name + ".")
 					}
 					file.WriteString(java_makeClassName(field.Name) + ".class")
-					switch field.Reciver_type {
-					case "both":
+					switch {
+					case isForClient(field) && isForServer(field):
 						file.WriteString(", true, true)")
-					case "server":
+					case isForServer(field):
 						file.WriteString(", true, false)")
-					case "client":
+					case isForClient(field):
 						file.WriteString(", false, true)")
 					}
 					file.WriteString(");\n")

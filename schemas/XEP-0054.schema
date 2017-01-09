@@ -2,7 +2,9 @@ package vcard
 category extension
 targetNamespace vcard-temp {
 
-  *vcard ::= set {
+  @decode
+  @iq get:empty set result
+  vcard ::= set {
     VERSION string element:cdata
     FN string element:cdata
     N

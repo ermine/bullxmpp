@@ -35,7 +35,7 @@ type MechanismImpl struct {
 }
 
 var Mechanisms = []MechanismImpl {
-//	MechanismImpl{"SCRAM-SHA-1", sasl_SCRAM_SHA_1},
+	MechanismImpl{"SCRAM-SHA-1", sasl_SCRAM_SHA_1},
 	MechanismImpl{"DIGEST-MD5", sasl_DIGEST_MD5},
 	MechanismImpl{"PLAIN", sasl_PLAIN},
 }

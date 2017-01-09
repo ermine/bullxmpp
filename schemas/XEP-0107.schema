@@ -2,7 +2,8 @@ package mood
 category extension
 targetNamespace http://jabber.org/protocol/mood {
 
-  *mood ::= set {
+  @decode
+  mood ::= set {
     mood enum {
       afraid
       amazed

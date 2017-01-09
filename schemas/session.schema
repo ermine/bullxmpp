@@ -2,5 +2,7 @@ package session
 category core
 targetNamespace urn:ietf:params:xml:ns:xmpp-session {
 
-  *session ::= set {} element
+  @decode
+  @iq set:empty result:empty
+  session ::= set {} element
 }

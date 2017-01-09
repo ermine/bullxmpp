@@ -170,6 +170,6 @@ return err
 
 func init() {
  xmlencoder.AddExtension(xml.Name{NS, "stream"}, Start{}, true, true)
- xmlencoder.AddExtension(xml.Name{NS, "features"}, Features{}, true, true)
+ xmlencoder.AddExtension(xml.Name{NS, "features"}, Features{}, true, false)
  xmlencoder.AddExtension(xml.Name{NS, "error"}, Error{}, true, true)
 }
