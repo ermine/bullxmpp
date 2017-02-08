@@ -7,7 +7,6 @@ type JID struct {
 	Node string
 	Domain string
 	Resource string
-	orig string
 }
 
 func New(jid_string string) (*JID, error) {
@@ -28,7 +27,7 @@ func New(jid_string string) (*JID, error) {
 		Node : Nodeprep(node),
 		Domain : Nameprep(domain),
 		Resource : Resourceprep(resource),
-		orig : jid_string}, nil
+	}, nil
 }
 
 func Nodeprep(s string) (string) {
@@ -91,13 +90,23 @@ func (jid *JID) GetIDN() (string, error) {
 	return strings.Join(parts, "."), nil
 }
 
-func (jid *JID) Bare() string {
-	parts := strings.SplitN(jid.orig, "/", 2)
-	return parts[0]
+	func (jid *JID) Bare() string {
+		if jid.Node != "" {
+			return jid.Node + "@" + jid.Domain
+		} else {
+			return jid.Domain
+		}
 }
 
-func (jid *JID) String() string {
-	return jid.orig
+	func (jid *JID) String() string {
+		result := jid.Domain
+		if jid.Node != "" {
+			result = jid.Node + "@" + jid.Domain
+		}
+		if jid.Resource != "" {
+			result += "/" + jid.Resource
+		}
+		return result
 }
 
 func (jid *JID) FromString(s string) (interface{}, error) {
@@ -107,6 +116,5 @@ func (jid *JID) FromString(s string) (interface{}, error) {
 func (jid *JID) Server() *JID {
 	return &JID{
 		Domain: jid.Domain,
-		orig: jid.Domain,
 	}
 }
