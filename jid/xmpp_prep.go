@@ -93,9 +93,9 @@ func get_decomp(x rune) (ret []decomp_data) {
 			data := ddata.arr[x - ddata.first]
 			i := 0
 			ret = make([]decomp_data, len(data))
-			for d := range data {
+			for _, d := range data {
 				ret[i].r = rune(d >> 8)
-				ret[i].cc = d & 0xFF
+				ret[i].cc = int(d & 0xFF)
 				i++
 			}
 			return
@@ -268,7 +268,7 @@ func compose(rs []decomp_data) (ret []rune) {
 	return
 }
 
-func nfkc(rs []rune) (ret []rune) {
+func nfkc(rs []rune) []rune {
 	return compose(decompose(rs))
 }
 
